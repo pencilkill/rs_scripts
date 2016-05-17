@@ -1,0 +1,33 @@
+program new;
+{$DEFINE SMART}              // Always have this to load smart
+{$I SRL-6/SRL.simba}
+
+Var
+Player: TPlayer;
+
+procedure DeclarePlayers();
+begin
+  setLength(players, 1);
+  with players[0] do
+  begin
+    loginName   := 'cmd.dos@hotmail.com';
+    password    := 'sam123';
+    bankPin     := '';
+    isActive    := True;
+    isMember    := True;
+  end;
+  currentPlayer := 0;
+  //
+  Player := players[currentPlayer];
+end;
+
+Var
+w, h, t: Integer;
+tp: tpoint;
+begin
+  SetupSRL;                   // Load the SRL include files
+  DeclarePlayers;
+  mouseSpeed := 100;
+  if Not isLoggedIn then Player.login();
+  Player.exitToLobby;
+end.
