@@ -1,0 +1,154 @@
+program Thief;
+{$DEFINE SMART}
+{$I SRL-6/SRL.simba}
+{$I SRL-6/lib/misc/srlplayerform.simba}
+
+const
+  Ver = 'V1.00';
+  DTM_LOCATE_STRING = 'mWAAAAHicY2FgYBADYm0gdmeAAGMo7QzE7ECsZSrDsDLSisFzyxkGn71+DClAMX4kzIiGQQAAMQAGdg==';
+
+var
+  thieves, failures: integer;
+
+procedure doForm();
+var
+  mouseStr: string;
+  JSONNameSearch, JSONIDSearch, NPCID, XPString: string;
+begin
+  with playerForm do
+  begin
+    name := 'Thief';
+  end;
+  runPlayerForm();
+  if not playerForm.isScriptReady then
+    terminateScript();
+  players.setup(playerForm.players);
+  currentPlayer := 0;
+end;
+
+function loginCheck(): boolean;
+begin
+  if isLoggedIn() then
+    exit(true);
+  if not players[currentPlayer].login() then
+    exit(false);
+  wait(randomRange(2300, 4300));
+  minimap.clickCompass();
+  exitTreasure();
+  exit(true);
+end;
+
+function detectNPCs(): TPointArray;
+var
+  me: TPoint;
+begin
+  me := minimap.getCenterPoint;
+  result := minimap.pointsToMainscreen(minimap.getDots(MM_DOT_NPC, minimap.getBounds()));
+end;
+
+function detectNPC(var npcs: TPointArray): TPoint;
+var
+  i: Integer;
+begin
+  mainscreen.filterPointsPlayer(npcs);
+  for i := 0 to high(npcs) do
+  begin
+    if not npcs[i].isInvalid() then
+    begin
+      if npcs[i].x < mainscreen.getCenterPoint.x then
+      begin
+        result := point(Max(npcs[i].x - 15, mainscreen.x1), npcs[i].y);
+      end else begin
+        result := point(Min(npcs[i].x + 15, mainscreen.x2), npcs[i].y);
+      end;
+      break;
+    end;
+  end;
+end;
+
+function thief(npc: TPoint): Boolean;
+overload;
+var
+  x, y: Integer;
+  thief: Boolean;
+begin
+  moveMouse(npc);
+  if isMouseOverText(['ttack']) then
+  begin
+    getMousePos(x, y);
+    mouse(point(x, y), MOUSE_RIGHT);
+    thief := chooseOption.select(['pocket']);
+    if thief then
+      minimap.waitPlayerMoving(randomrange(1000, 1500));
+    exit(thief);
+  end;
+  result := false;
+end;
+
+function relocate(): Boolean;
+var
+  dtm, x, y: Integer;
+begin
+  dtm := DTMFromString(DTM_LOCATE_STRING);
+  if minimap.findDTM(dtm, x, y) then
+  begin
+    mouse(point(x, y), MOUSE_LEFT);
+    minimap.waitPlayerMoving(randomrange(1000, 1500));
+    result := true;
+  end;
+  freeDTM(dtm);
+end;
+
+procedure antiban();
+var
+  r: Integer;
+begin
+  r := randomrange(1, 10);
+  case r of
+    1: randomGameTab();
+    7: closePopup();
+  end;
+end;
+
+procedure progressReport(force: boolean = false);
+var
+  thievesPerHour: extended;
+begin
+  if force or ((thieves mod 5) = 0) then
+  begin
+    thievesPerHour := thieves * (3600.0 / (GetTimeRunning / 1000.0));
+    writeln('=========== Thief ' + Ver + ' ============');
+    writeln('     Thieves ', thieves);
+    writeln('     Thieves/Hr: ', thievesPerHour);
+    writeLn('     Time running: ' + timeRunning(TIME_SHORT));
+    writeln('==============================================');
+  end;
+end;
+
+begin
+  doForm();
+  disableIPScreenshots := true;
+  disableSRLLog := true;
+  disableSRLDebug := true;
+  setupSRL();
+  while loginCheck() do
+  begin
+    if thief(detectNPC(detectNPCs())) then
+    begin
+      inc(thieves);
+      failures := 0;
+      progressReport();
+      antiban();
+    end
+    else
+    begin
+      inc(failures);
+      print('Failed to thief NPC');
+    end
+    if failures > 100 then
+    begin
+      print('***** Sorry, failed to thief NPC 50 times, relocate !');
+      relocate();
+    end;
+  end;
+end.
