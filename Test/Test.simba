@@ -2,6 +2,9 @@ program new;
 {$DEFINE SMART}              // Always have this to load smart
 {$I SRL-6/SRL.simba}
 
+Const
+DebugMode = False;        // Debug script ?
+
 Var
 Player: TPlayer;
 
@@ -10,11 +13,11 @@ begin
   setLength(players, 1);
   with players[0] do
   begin
-    loginName   := 'cmd.dos@hotmail.com';
-    password    := 'sam123';
+    loginName   := 'hrtdhdbghcnbv@yahoo.com';
+    password    := 'dnbb1412';
     bankPin     := '';
     isActive    := True;
-    isMember    := True;
+    isMember    := False;
   end;
   currentPlayer := 0;
   //
@@ -25,9 +28,10 @@ Var
 w, h, t: Integer;
 tp: tpoint;
 begin
+  smartResetAttempts := -1;
   SetupSRL;                   // Load the SRL include files
   DeclarePlayers;
   mouseSpeed := 100;
   if Not isLoggedIn then Player.login();
-  Player.exitToLobby;
+  //Player.exitToLobby;
 end.

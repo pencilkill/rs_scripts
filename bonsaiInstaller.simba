@@ -1,0 +1,164 @@
+{_____________________________________________________________________}
+{=====================================================================}
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}
+{  bonsaiInstaller.simba                                              }
+{  Written by: bonsai                                                 }
+{  Date Last Modified: 2014/09                                        }
+{_____________________________________________________________________}
+{=====================================================================}
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}
+program bonsaiInstaller;
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}
+const   
+   blBitmapCodeUrl = 'http://pastebin.com/raw/RwkfJn1C';
+   blBreakCodeUrl = 'http://pastebin.com/raw/=XPiz7BJ5';
+   blColorizerCodeUrl = 'http://pastebin.com/raw/kxU0Dcvn';
+   blCombatCodeUrl = 'http://pastebin.com/raw/wuYUh3i8';
+   blMiscCodeUrl = 'http://pastebin.com/raw/PCmzxGRT';
+   blNpcCodeUrl = 'http://pastebin.com/raw/9kYFFLAU';
+   blTrackerCodeUrl = 'http://pastebin.com/raw/Fm7xWtHe';
+   blUpdaterCodeUrl = 'http://pastebin.com/raw/UM7XpgZQ';
+   fighterUrl = 'http://pastebin.com/raw/wR7FhHib';
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}  
+type
+   Tupdater = record
+      wereUpdatesPerformed : boolean;
+   end;
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}
+var
+   updater: Tupdater;
+{¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯}
+   
+procedure Tupdater.die(s: string);
+begin
+   writeln('*******************************************************');
+   writeln('***** FATAL ERROR: ', s);   
+   writeln('*******************************************************');
+   terminateScript();
+end;
+
+procedure Tupdater.header(s: string);
+begin
+   writeln('-------------------------------------------------------');
+   writeln('-- ', s);
+end;
+
+procedure Tupdater.msg(s: string);
+begin
+   writeln('--     ', s);
+end;
+
+function Tupdater.rename(oldName: string; newName: string; delIfExists: boolean = true): boolean;
+var
+   inFile, outFile, fsize: integer;
+   s: string;
+begin
+   if (FileExists(newName)) then
+   begin
+      if (not delIfExists) then
+         self.die('File already exists, could not rename ' + oldName + ' to ' + newName);
+         
+      self.msg('removing file ' + newName);
+      result := DeleteFile(newName);
+      if (not result) then
+         self.die('Error deleting ' + newName);
+   end;
+   
+   inFile := OpenFile(oldName, false);
+   if (inFile = -1) then
+      self.die('Error opening ' + oldName + ' for reading.');
+      
+   outfile := RewriteFile(newName, false);
+   if (outFile = -1) then
+      self.die('Error opening ' + newName + ' for writing.');
+
+   fsize := FileSize(inFile);
+   
+   result := ReadFileString(inFile, s, fsize);
+   if (not result) then
+      self.die('Error reading from ' + oldName);
+      
+   result := WriteFileString(outFile, s);
+   if (not result) then
+      self.die('Error writing to ' + newName);
+      
+   CloseFile(inFile);
+   CloseFile(outFile);
+   result := true;
+end;
+
+function Tupdater.createIncludeFolder(dname: string): boolean
+begin
+   self.header('Checking for ' + dname + ' include folder:');
+   if (DirectoryExists(includePath + dname)) then
+   begin
+      self.msg('include folder already exists, no change made');
+      result := true;
+   end
+   else
+   begin
+      result := CreateDirectory(includePath + dname);
+      if (result) then
+         self.msg('created include folder ' + includePath + dname)
+      else
+         self.die('Could not create directory ' + includePath + dname);
+   end;
+end;
+
+function Tupdater.download(fname: string; url: string; isLib: boolean = false): boolean;
+var
+   fullPath, contents: string;
+   outFile: integer;
+begin
+   self.header('Installing latest ' + fname);
+   if (isLib) then
+      fullPath := includePath + 'bonsai\' + fname
+   else
+      fullPath := appPath + 'Scripts\' + fname;
+  
+   if (FileExists(fullPath)) then
+   begin
+      self.msg('file ' + fullPath + ' already exists, renaming to .bak');
+      self.rename(fullPath, fullPath + '.bak');
+   end;
+   
+   contents := GetPage(url);
+   
+   if (contents = '') then
+      self.die('Could not load new script contents from ' + url);
+      
+   outfile := RewriteFile(fullPath, false);
+   if (outFile = -1) then
+      self.die('Error opening ' + fullPath + ' for writing.');
+      
+   if (WriteFileString(outFile, contents)) then
+      self.msg('Script ' + fullPath + ' has been updated')
+   else
+      self.die('Error writing new contents to ' + fullPath);
+      
+   CloseFile(outFile);
+   result := true;
+end;
+
+begin
+   updater.header('Installing bonsaiFighter');   
+   updater.createIncludeFolder('bonsai');
+   updater.createIncludeFolder('bonsai\colors');
+
+   updater.download('blBitmap.simba', blBitmapCodeUrl, true);
+   updater.download('blBreak.simba', blBreakCodeUrl, true);
+   updater.download('blColorizer.simba', blColorizerCodeUrl, true);
+   updater.download('blCombat.simba', blCombatCodeUrl, true);
+   updater.download('blMisc.simba', blMiscCodeUrl, true);
+   updater.download('blNpc.simba', blNpcCodeUrl, true);
+   updater.download('blTracker.simba', blTrackerCodeUrl, true);
+   updater.download('blUpdater.simba', blUpdaterCodeUrl, true);
+   updater.download('bonsaiFighter.simba', fighterUrl, false);
+
+   updater.header('Install Completed');
+   writeln('-------------------------------------------------------');
+
+   // self destruct on the way out
+   if (FileExists(appPath + 'Scripts\bonsaiInstaller.simba')) then
+      DeleteFile(appPath + 'Scripts\bonsaiInstaller.simba');
+end.
