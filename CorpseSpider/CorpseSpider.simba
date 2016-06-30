@@ -102,7 +102,7 @@ begin
     settings.cts := 2;
     settings.modifier.hue := StrToFloatDef(allData[4], 0.0);
     settings.modifier.saturation := StrToFloatDef(allData[5], 0.0);
-  end;
+  end
 end; 
 
 procedure newNPC();
@@ -113,9 +113,9 @@ begin
     checkBoxDefaults := [];
     comboBoxLabels := [];
     comboBoxDefaults := []; 
-    name := 'CorpseSpider\Fighter';
+    name := 'CorpseSpider/Fighter';
     editBoxLabels := ['Name', 'XP', 'Color', 'Tolerance', 'Hue', 'Saturation'];
-    editBoxDefaults := ['CorpseSpider', '0', '2336861', '20', '1.24', '1.74'];
+    editBoxDefaults := ['CorpseSpider', '0', '2487390', '20', '1.62', '0.57'];
   end;
 
   runPlayerForm();  
@@ -146,7 +146,7 @@ begin
     editBoxLabels := ['Food Key', 'SGS Key'];
     editBoxDefaults := ['=', '-'];
     comboBoxLabels := ['Mouse Style', 'NPC'];
-    comboBoxDefaults := ['Right', 'CorpseSpider\Fighter'];
+    comboBoxDefaults := ['Right', 'CorpseSpider/Fighter'];
     setLength(comboBoxItems, length(comboBoxLabels));
     comboBoxItems[0] := ['Left', 'Right'];
     comboBoxItems[1] := knownNPCs();
@@ -167,7 +167,7 @@ begin
   npcName  := playerForm.players[0].settings[4];
   manualAbilities := StrToBoolDef(playerForm.players[0].settings[2], false);
 
-  if (npcName = 'CorpseSpider\Fighter') then
+  if (npcName = 'CorpseSpider/Fighter') then
     newNPC()
   else
     loadNPC(npcName); 
@@ -178,10 +178,17 @@ begin
     mouseStyle := MOUSE_RIGHT;
 end;
 
-function loginCheck(): boolean;
+function loginCheck(fixAngle : Boolean = false): boolean;
 begin
-  if isLoggedIn() then 
+  if isLoggedIn() then
+  begin
+    if fixAngle then
+    begin
+      minimap.clickCompass();
+      mainscreen.setAngle(MS_ANGLE_HIGH);
+    end;
     exit(true);
+  end;
   if not players[currentPlayer].login() then 
     exit(false);
   wait(randomRange(2300, 4300));
@@ -294,8 +301,9 @@ begin
   mainscreen.filterPointsPlayer(tpa); 
   atpa := tpa.split(6);
   atpa.filterBetween(0, 5);
+
   atpa.sortFromMidPoint(mainscreen.playerPoint);
-  
+
   for i := 0 to min(high(atpa),5) do
   begin
     if lastTargetBox.overlap(atpa[i].getBounds()) then
@@ -303,7 +311,9 @@ begin
     atpa[i].getBounds().mouse();
     wait(20);
     if isMouseOverText(['ttack'], 100) then
-      exit(true);                  
+      exit(true)
+    else
+      lastTargetBox.combine(atpa[i].getBounds());
   end;
   exit(false);
 end;
@@ -341,7 +351,7 @@ begin
   end;
 
   fastClick(MOUSE_RIGHT);
-  if chooseoption.select(['Attack'], 100) then
+  if chooseoption.select(['ttack C'], 100) then
     exit(true);
       
   exit(false);
@@ -403,7 +413,7 @@ var
   killsPerHour: extended;
 begin
   killsPerHour := kills * (3600.0 / (GetTimeRunning / 1000.0));
-  writeln('=========== CopseSpiderFighter ============');
+  writeln('=========== CopseSpider ============');
   writeln('     Fighting ', npcName);
   writeln('     Kills: ', kills);
   writeln('     Kills/Hr: ', killsPerHour);
@@ -430,8 +440,10 @@ begin
   doForm();
   disableIPScreenshots := true;
   disableSRLLog := true;
-  disableSRLDebug := true;  
+  disableSRLDebug := false;
   setupSRL();
+
+  loginCheck(true);
 
   while loginCheck() do
   begin
@@ -440,18 +452,11 @@ begin
       inc(kills);
       failures := 0
       if (kills mod 15) = 0 then progressReport();
-      writeln('Killed one');
     end
     else
-      inc(failures);
-      
-    writeln('Failed to attack NPC');
-    if failures > 50 then 
     begin
-      writeln('***** Sorry, failed to find NPC 50 times, giving up');
-      terminateScript();
+      inc(failures);
     end;
-    
     checkHealth();
   end;
 end.
