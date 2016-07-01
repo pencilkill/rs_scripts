@@ -1,0 +1,462 @@
+program CorpseSpider;
+{$DEFINE SMART}
+{$i srl-6/srl.simba}
+{$include_once srl-6/lib/misc/srlplayerform.simba}
+
+var
+  npcColor: TColorData;
+  npcName, foodKey, sgsKey: string;
+  lastTargetBox: TBox;
+  kills, mouseStyle, goldLockDTM, failures: integer;
+  npcXp: extended;
+  manualAbilities: boolean;
+
+procedure setDTMTol(var d: integer; tol: integer)
+var
+   ts: TSDTM;
+   i: integer;
+   s: string;
+begin
+   if not DTMExists(d) then exit;
+
+   ts := MDTMToSDTM(GetDTM(d));
+   for i := 0 to high(ts.subpoints) do
+      ts.subpoints[i].tolerance := tol;
+
+   s:= GetDTMName(d);
+   FreeDTM(d);
+   d := AddSDTM(ts);
+   SetDTMName(d, s);
+end;
+
+function knownNPCs(): TStringArray;
+var
+   p: string;
+   i: integer;
+begin
+   setLength(result, 0);
+   result := GetFiles(scriptPath, 'color');
+
+   for i := 0 to high(result) do
+   begin
+      result[i] := Replace(result[i], '.color', '', [rfReplaceAll]);
+      result[i] := Replace(result[i], '-', ' ', [rfReplaceAll]);
+   end;
+end;
+
+procedure saveNPC();
+var
+  name, filePath, s: string;
+  fileId: integer;
+begin
+  name := Replace(npcName, ' ', '-', [rfReplaceAll]);
+  filePath := scriptPath + name + '.color';
+  fileId := RewriteFile(filePath, false);
+	if (fileId = -1) then
+   begin
+    writeln('***** RewriteFile failed [', filePath, ']');
+    exit;
+   end;
+   
+   s := npcName + '|' + floatToStr(npcXp) + '|';
+   with npcColor do
+   begin
+    s := s + intToStr(color) + '|';
+    s := s + intToStr(tolerance) + '|';
+    s := s + floatToStr(settings.modifier.hue) + '|';
+    s := s + floatToStr(settings.modifier.saturation);    
+   end;
+
+  if (not WriteFileString(fileId, s)) then	
+    terminateScript();
+  CloseFile(fileId);  
+end;
+
+function loadNPC(name: string): boolean;
+var
+  filePath, fileData: string;
+  fileId: integer;
+  allData: TStringArray;
+begin
+  name := Replace(name, ' ', '-', [rfReplaceAll]);
+  filePath := scriptPath + name + '.color';
+	if (not FileExists(filePath)) then terminateScript();
+
+	fileId := OpenFile(filePath, false);
+  if (fileId = -1) then terminateScript();
+	
+	if (not ReadFileString(fileId, fileData, FileSize(fileId))) then 
+    terminateScript();
+	CloseFile(fileId);  
+  
+  allData := Explode('|', fileData);	
+  if length(allData) <> 6 then
+    exit(false);
+    
+  npcName := allData[0];
+  npcXp := StrToFloatDef(allData[1], 0.0);
+  with npcColor do
+  begin
+    color     := StrToIntDef(allData[2], 0);
+    tolerance := StrToIntDef(allData[3], 0);
+    settings.cts := 2;
+    settings.modifier.hue := StrToFloatDef(allData[4], 0.0);
+    settings.modifier.saturation := StrToFloatDef(allData[5], 0.0);
+  end
+end; 
+
+procedure newNPC();
+begin
+  with playerForm do
+  begin
+    checkBoxLabels := [];
+    checkBoxDefaults := [];
+    comboBoxLabels := [];
+    comboBoxDefaults := []; 
+    name := 'CorpseSpider/Fighter';
+    editBoxLabels := ['Name', 'XP', 'Color', 'Tolerance', 'Hue', 'Saturation'];
+    editBoxDefaults := ['CorpseSpider', '0', '2487390', '20', '1.62', '0.57'];
+  end;
+
+  runPlayerForm();  
+  if not playerForm.isScriptReady then
+    terminateScript();
+
+  npcName := playerForm.players[0].settings[0];
+  npcXp := StrToFloatDef(playerForm.players[0].settings[1], 0.0);
+  with npcColor do
+  begin
+    color     := StrToIntDef(playerForm.players[0].settings[2], 0);
+    tolerance := StrToIntDef(playerForm.players[0].settings[3], 0);
+    settings.cts := 2;
+    settings.modifier.hue := StrToFloatDef(playerForm.players[0].settings[4], 0.0);
+    settings.modifier.saturation := StrToFloatDef(playerForm.players[0].settings[5], 0.0);
+  end;
+  saveNPC();
+end;
+
+procedure doForm();
+var
+  mouseStr: string;
+  JSONNameSearch, JSONIDSearch, NPCID, XPString: string;
+begin
+  with playerForm do
+  begin
+    name := 'CorpseSpider';
+    editBoxLabels := ['Food Key', 'SGS Key'];
+    editBoxDefaults := ['=', '-'];
+    comboBoxLabels := ['Mouse Style', 'NPC'];
+    comboBoxDefaults := ['Right', 'CorpseSpider/Fighter'];
+    setLength(comboBoxItems, length(comboBoxLabels));
+    comboBoxItems[0] := ['Left', 'Right'];
+    comboBoxItems[1] := knownNPCs();
+    checkBoxLabels := ['Manual Abilities'];
+    checkBoxDefaults := ['False'];
+  end;
+  
+  runPlayerForm();  
+  if not playerForm.isScriptReady then
+    terminateScript();
+    
+  players.setup(playerForm.players);
+  currentPlayer := 0;
+
+  foodKey  := playerForm.players[0].settings[0];
+  sgsKey   := playerForm.players[0].settings[1];
+  mouseStr := playerForm.players[0].settings[3];
+  npcName  := playerForm.players[0].settings[4];
+  manualAbilities := StrToBoolDef(playerForm.players[0].settings[2], false);
+
+  if (npcName = 'CorpseSpider/Fighter') then
+    newNPC()
+  else
+    loadNPC(npcName); 
+  
+  if mouseStr = 'Left' then
+    mouseStyle := MOUSE_LEFT
+  else
+    mouseStyle := MOUSE_RIGHT;
+end;
+
+function loginCheck(fixAngle : Boolean = false): boolean;
+begin
+  if isLoggedIn() then
+  begin
+    if fixAngle then
+    begin
+      minimap.clickCompass();
+      mainscreen.setAngle(MS_ANGLE_HIGH);
+    end;
+    exit(true);
+  end;
+  if not players[currentPlayer].login() then 
+    exit(false);
+  wait(randomRange(2300, 4300));
+  minimap.clickCompass();
+  mainscreen.setAngle(MS_ANGLE_HIGH);
+  exitTreasure();
+  exit(true);
+end;
+
+procedure checkHealth();
+begin
+  if ((actionbar.getHPPercent() < 50) and
+    (sgsKey <> '') and (actionbar.getAdrenalinePercent() > 50)) then
+  begin
+    sendKeys(sgsKey, 250, 40);
+    exit;
+  end;
+
+  if (actionbar.getHPPercent() < 50) then
+    sendKeys(foodKey, 250, 40);
+
+  if (actionbar.getHPPercent() < 25) then
+  begin
+    writeln('***** Terminating script due to low health');
+    terminateScript();
+  end;
+end;
+
+function detectTarget(): boolean;
+var
+   i, votes: integer;
+   oneColor, rawColors: TPointArray;
+   atpa: T2DPointArray;
+   colors: TIntegerArray;
+   b: TBox;
+   
+begin
+  colors := [66815,329215,263679,132351,1445887,198143,197887,
+    1642751,394751,1577215,460543,1643007,1117439,986111,1249023,
+    1774079,1708543,1183487,1380351,526079,788991,1051903,
+    723199,1183231,723455,591871,1117695,395007,1511679,395252,
+    1314815,263674,657407,854783,657663];
+
+  for i := 0 to high(colors) do
+    if (findcolors(oneColor, colors[i], mainscreen.getBounds())) then
+    begin
+      if (length(oneColor) > 100) then 
+        continue;
+      rawColors.combine(oneColor);
+    end;
+
+  findColorsTolerance(oneColor, 2436275, 
+    mainscreen.getBounds(), 10, colorsetting(2,0.02,1.01));
+  rawColors.combine(oneColor);
+    
+  mainscreen.filterPointsPlayer(rawColors);
+  atpa := rawColors.cluster(45,45);
+  atpa.filterBetween(0, 50);
+  atpa.filterBetween(400, maxint);
+
+  if (length(atpa) = 1) then
+    inc(votes);
+
+  for i := 0 to high(atpa) do
+  begin             
+    b := atpa[i].getBounds();
+
+    if inRange(b.getWidth(), 22, 45) then
+      inc(votes);
+    if inRange(b.getHeight(), 22, 45) then
+      inc(votes);
+
+    if (votes > 1) then
+    begin
+      b.expand(12);
+      b.setLimit(mainscreen.getBounds());
+      lastTargetBox := b;
+      exit(true);
+    end;
+    votes := 0;
+  end;
+  exit(false);
+end;
+
+function detectFight(): boolean;
+var
+   x,y: integer;
+begin
+  result := false;
+  if findDTM(goldLockDTM, x, y, mainScreen.getBounds()) then
+  begin
+    detectTarget();
+    exit(true);
+  end;
+end;
+
+function mouseNPC(): boolean;
+var
+  i: integer;
+  tpa: TPointArray;
+  atpa: T2DPointArray;
+begin
+  if isMouseOverText(['ttack'], 100) then
+    exit(true);   
+      
+  npcColor.gatherIn(tpa, mainscreen.getBounds());
+  if length(tpa) < 1 then
+    exit;
+    
+  mainscreen.filterPointsPlayer(tpa); 
+  atpa := tpa.split(6);
+  atpa.filterBetween(0, 5);
+
+  atpa.sortFromMidPoint(mainscreen.playerPoint);
+
+  for i := 0 to min(high(atpa),5) do
+  begin
+    if lastTargetBox.overlap(atpa[i].getBounds()) then
+      continue;
+    atpa[i].getBounds().mouse();
+    wait(20);
+    if isMouseOverText(['ttack'], 100) then
+      exit(true)
+    else
+      lastTargetBox.combine(atpa[i].getBounds());
+  end;
+  exit(false);
+end;
+
+procedure doAbilities();
+var
+  i, pct: integer;
+  keyStr: string;
+begin
+  for i := 9 downto 1 do  // used 9 to match revolution
+  begin
+    pct := actionBar.getAbilityCooldown(i);
+    if (pct = 1) then
+    begin
+      keyStr := intToStr(i);
+      SendKeys(keyStr[1], 60 + Random(60), 60 + Random(60));
+      exit;  // only do one ability
+    end;
+  end;
+end;
+
+function initiateFight(): boolean;
+var
+  i: integer;
+  tpa: TPointArray;
+  atpa: T2DPointArray;
+begin
+  if not mouseNPC() then
+    exit(false);
+    
+  if mouseStyle = MOUSE_LEFT then
+  begin
+    fastClick(MOUSE_LEFT);
+    exit(didClick(true));
+  end;
+
+  fastClick(MOUSE_RIGHT);
+  if chooseoption.select(['ttack C'], 100) then
+    exit(true);
+      
+  exit(false);
+end;
+
+function attack(): boolean;
+var
+  found1, found2: boolean;
+  t, ability: TTimeMarker;
+  timeout: integer;
+begin
+  if not initiateFight() then
+    exit(false);
+    
+  t.start();
+  repeat
+    wait(50);
+    found1 := detectFight();
+    if (t.getTime() > 2500) and (not minimap.isPlayerMoving()) then
+      break;
+  until found1 or (t.getTime() > randomRange(6500,8000));
+  
+  t.start();
+  ability.start();
+  timeout := getSystemTime() + 240000;
+  while detectFight() do
+  begin
+    if getSystemTime() >= timeout then
+    begin
+      writeln('***** Something wrong... in fight too long');
+      terminateScript();
+    end;
+    if ability.getTime() > 2000 then
+    begin
+      doAbilities();
+      ability.reset();
+      ability.start();
+    end;
+    if t.getTime() > 5000 then
+    begin
+      checkHealth();
+      t.reset();
+      t.start();
+    end;
+    mouseNPC();
+    wait(200);
+  end;
+  
+  if not (found1 or found2) then
+  begin
+    writeln('***** Probable miss, did not detect start of fight');
+    exit(false);
+  end;
+  exit(true);
+end;
+
+procedure progressReport();   // stole this from ross, hehehe
+var
+  killsPerHour: extended;
+begin
+  killsPerHour := kills * (3600.0 / (GetTimeRunning / 1000.0));
+  writeln('=========== CopseSpider ============');
+  writeln('     Fighting ', npcName);
+  writeln('     Kills: ', kills);
+  writeln('     Kills/Hr: ', killsPerHour);
+  writeln('     XP: ', kills * (npcXp * 1.3));
+  writeln('     XP/Hr: ', killsPerHour * (npcXp * 1.3));
+  writeLn('     Time running: ' + timeRunning(TIME_SHORT));
+  writeln('==============================================');
+end;
+
+procedure _terminate();
+begin
+  freeDTM(goldLockDTM);
+  progressReport();
+end;
+
+begin
+   addOnTerminate('_terminate');
+  {$IFDEF SMART}
+  smartEnableDrawing := true;
+  {$ENDIF}
+  goldLockDTM := DTMFromString('mlwAAAHicY2dgYChjZGCohWIQuwqIy4G4GIi5oZgdipmR8OVJkmB8a6YmGDv6hDJs67ZgsHHzY8AHGPFgKAAAxWIM8w==');
+  setDTMTol(goldLockDTM, 20); 
+  
+  doForm();
+  disableIPScreenshots := true;
+  disableSRLLog := true;
+  disableSRLDebug := false;
+  setupSRL();
+
+  loginCheck(true);
+
+  while loginCheck() do
+  begin
+    if attack() then 
+    begin
+      inc(kills);
+      failures := 0
+      if (kills mod 15) = 0 then progressReport();
+    end
+    else
+    begin
+      inc(failures);
+    end;
+    checkHealth();
+  end;
+end.
