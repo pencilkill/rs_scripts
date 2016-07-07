@@ -1,0 +1,199 @@
+program blueDragon;
+{$DEFINE SMART}
+{$DEFINE WALKER}
+{$I AeroLib/AeroLib.Simba}
+
+Const
+  DEBUG_MODE = true;
+
+var
+CastleWarsChest, CityGate, CaveEnterance : TMSObject;
+RSW : TRSWalker;
+Ring : TItem;
+
+procedure DeclarePlayer();
+begin
+  Me.Name := 'geraldaltemosefkwf@yahoo.com';
+  Me.Pass := 'sAhtKGG6';
+  Me.Pin := '';
+  Me.Member := True;
+  Me.Active := True;
+end;
+
+procedure debug(v : Variant);
+begin
+  if DEBUG_MODE then
+    writeln('[D] ' + toStr(v));
+end;
+
+procedure init();
+begin
+  initAL();
+  DeclarePlayer();
+  loginPlayer(false);
+
+  with Ring do
+  begin
+    Name := 'Ring of dueling';
+    DTM := DTMFromString('mggAAAHicY2NgYMhkYmBIAeIsIM4A4nwgzgXix0C5+1D8AoifAPFtIDZQUGCY0SrIcGqjOMPlHVJgtmCXCAMXUA4bZsSBIQAA2c0Oyg==');
+    Wieldable := true;
+  end;
+
+  CastleWarsChest.create('Castle wars chest', ['Open Bank chest', 'Bank chest'], [createCol(6316392, 10, 0.24, 0.09)], [createCol(6316392, 10, 0.24, 0.09)]);
+  CityGate.create('City gate', ['Open City gate', 'City gate'], [createCol(1055004, 10, 0.90, 0.48)], [createCol(4489653, 28, 0.03, 1.39)]);
+  CaveEnterance.create('Cave entrance', ['Enter Cave entrance', 'Cave entrance'], [createCol(742503, 10, 0.05, 0.59)], [createCol(998219, 10, 0.16, 1.42)]);
+
+  RSW.Init('surface', 'WorldMap');
+  RSW.walkStyle := EWalkStyle.wsSPS;
+
+  addOnTerminate('free');
+
+  debug('Init finished ...');
+end;
+
+function loginCheck(): Boolean;
+begin
+  result := loginPlayer(false);
+end;
+
+function getBankMode(): string; override;
+begin
+  result := 'Tabbed';
+end;
+
+function boneStore(): Boolean;
+var
+  bank, chest: TPoint;
+  equipRing : Boolean;
+begin
+  if findSymbol(bank, SYMBOL_Bank) then
+  begin
+    debug('Bank symbol found ' + toStr(bank));
+    mouseBox(pointToBox(bank, 2), MOUSE_LEFT);
+    waitFunc(@ isPlayerWalking, 1500, 15000);
+    equipRing := not Ring.inEquipment();
+    if CastleWarsChest.find(chest) and openBankPoint(chest, false) then
+    begin
+      debug('Bank chest found ' + toStr(chest));
+      quickDeposit('inv');
+      if equipRing then
+      begin
+        searchBank('Ring');
+        if not withdrawPoint(intToPoint(85, 100), 1) then
+        begin
+          debug('Withdraw ring : false');
+          exit(false);
+        end;
+        closeInterface();
+        Ring.interact(MOUSE_LEFT);
+      end;
+      exit(true);
+    end;
+  end;
+  exit(false);
+end;
+
+function main() : Boolean;
+var
+dist : TPoint;
+begin
+  dist := RSW.GetMyPos();
+  debug('My pos ' + toStr(dist));
+end;
+
+function gutanothWalker: Boolean;
+var
+path : TPointArray;
+dist : TPoint;
+begin
+  path := [Point(1573, 4093), Point(1625, 4092), Point(1628, 4122), Point(1630, 4153), Point(1665, 4157), Point(1698, 4163), Point(1731, 4169), Point(1767, 4168), Point(1798, 4168), Point(1836, 4175), Point(1875, 4179), Point(1918, 4176), Point(1942, 4194), Point(1984, 4196), Point(2020, 4200), Point(2025, 4232), Point(1996, 4249), Point(1966, 4262), Point(1938, 4239), Point(1909, 4209), Point(1877, 4218), Point(1846, 4212), Point(1816, 4205)];
+  RSW.walkPath(path);
+  waitFunc(@ isPlayerWalking, 500, 15000);
+  wait(randomrange(1500, 2500));
+  if CityGate.find(dist) then
+  begin
+    debug('Open City gate ...');
+    mouseBox(pointToBox(dist, 2), MOUSE_MOVE);
+    if waitUpTextMulti(['Open City gate', 'City gate', 'City', 'gate'], randomrange(500, 1500)) then
+    begin
+      fastClick(MOUSE_RIGHT);
+      waitFunc(@menuOpen, 20, 500);
+      chooseOption('Open');
+    end;
+  end;
+  path := [Point(1809, 4225), Point(1834, 4231), Point(1862, 4255), Point(1837, 4288)];
+  RSW.walkPath(path);
+  waitFunc(@ isPlayerWalking, 500, 15000);
+  wait(randomrange(1500, 2500));
+  if CaveEnterance.find(dist) then
+  begin
+    debug('Enter Cave entrance ...');
+    mouseBox(pointToBox(dist, 2), MOUSE_MOVE);
+    if waitUpTextMulti(['Enter Cave entrance', 'Cave entrance', 'Cave', 'entrance'], randomrange(500, 1500)) then
+    begin
+      fastClick(MOUSE_RIGHT);
+      waitFunc(@menuOpen, 20, 500);
+      chooseOption('Enter');
+      exit(true);
+    end;
+  end;
+  debug('Gutanoth walk : false');
+  exit(false);
+end;
+
+function dungonWalker: Boolean;
+begin
+end;
+
+function dragonPosition: TPoint;
+begin
+end;
+
+function dragonAttact(pos: TPoint): Boolean;
+begin
+end;
+
+function boneCollect: Boolean;
+begin
+end;
+
+function inventoryCheck: Boolean;
+begin
+end;
+
+function ringBack: Boolean;
+begin
+end;
+
+procedure free();
+begin
+  RSW.free();
+  FreeDTM(Ring.DTM);
+end;
+
+begin
+  init();
+  main();
+  {
+  while loginCheck() do
+  begin
+    if boneStore() then
+    begin
+      if gutanothWalker() then
+      begin
+        if dungonWalker() then
+        begin
+          while inventoryCheck() do
+          begin
+            if dragonAttact(dragonPosition()) then
+            begin
+              boneCollect();
+            end;
+          end;
+          ringBack();
+        end;
+      end;
+    end;
+  end;
+  }
+end.
