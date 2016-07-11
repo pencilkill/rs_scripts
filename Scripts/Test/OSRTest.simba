@@ -8,6 +8,7 @@ program R_Test;
 
 
 begin
-  initAL();
-  Reflect.Setup();
+  //initAL();
+  //Reflect.Setup();
+  writeln(scriptpath);
 end.
