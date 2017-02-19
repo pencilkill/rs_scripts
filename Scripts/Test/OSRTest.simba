@@ -1,0 +1,14 @@
+program R_Test;
+
+{$DEFINE SMART}
+{$DEFINE WALKER}
+
+{$i AeroLib/AeroLib.Simba}
+{$i Reflection/Reflection.Simba}
+
+
+begin
+  //initAL();
+  //Reflect.Setup();
+  writeln(scriptpath);
+end.
