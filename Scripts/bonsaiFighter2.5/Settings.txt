@@ -1,6 +1,0 @@
-<Army>default</Army>
-
-<dfhghvbnbcfhr@yahoo.com>
- [0, 50, 25, =, , 8, 120, 20, 17, 5, False, False, True, Left, autodetect]
-</dfhghvbnbcfhr@yahoo.com>
-
