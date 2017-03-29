@@ -1,68 +1,14 @@
-program new;
+program R_Test;
+
 {$DEFINE SMART}
-{$I SRL-OSR/SRL.simba}
-{$I SRL-OSR/SRL/misc/debug.simba}
-var
-  MyPlayer: TUser;
-procedure DeclarePlayer();
+{$DEFINE WALKER}
+
+{$i AeroLib/AeroLib.Simba}
+{$i Reflection/Reflection.Simba}
+
+
 begin
-  MyPlayer.Name := 'virgiefloe92@yahoo.com';
-  MyPlayer.Pass := 'Z8AVwGs6c';
-  MyPlayer.Pin := '';
-  MyPlayer.Member := True;
-  MyPlayer.Active := True;
-
-  CurrentPlayer := 0;
-
-  SetLength(Players, 1);
-  Players[0] := MyPlayer;
-end;
-
-function LoggedIn: Boolean; override;
-begin
-  //White text on Report Abuse Button
-  Result := (GetColor(445, 489) = 16777215);
-end;
-
-function RSReady: boolean; override;
-var
-  t : integer;
-begin
-
-  Result := (LoggedIn) Or (LobbyScreen) Or (WorldScreen);
-  if result then
-    exit;
-
-  if not Result then
-  begin
-    t := GetSystemTime() + 120000;
-    while GetSystemTime < t do
-    begin
-      Result := (GetColor(31, 488) = 16777215);
-      if result then
-      begin
-        SetAudioOff();
-        exit;
-      end;
-      wait(20+random(10));
-    end;
-  end;
-
-  Writeln('Could not start up Old School RuneScape or RSReady was not detected!');
-  TerminateScript;
-end;
-
-function StoreScreen: Boolean;
-begin
-  Result := FindTextTPAMulti(2070783, 10, 22, 30, 476, 52, ['Discount', 'discount'], 'UpChars07', Nothing);
-end;
-
-Var
-w, h, t: Integer;
-begin
-
-  //SetupSrl;
-  //DeclarePlayer;
-  //if Not loggedin Then loginplayer;
-  ShowMessage('    Run out of money ... ');
+  //initAL();
+  //Reflect.Setup();
+  writeln(scriptpath);
 end.

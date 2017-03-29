@@ -21,17 +21,17 @@ Const                                      //
 //===========================================
 //===== Account Setup =======================
 
-  Ver = 'V2.11';
+  Ver = 'V2.09';
                             // Large: Need ~2M/hr to run
   PuzzleSize = 'Large';     // Small: Need ~100k/hr to run
-  AccountLogin = 'aaravtrollpjpf@yahoo.com';        // Runescape Account Login
-  AccountPassword = 'H7TeGTiy';     // Runescape Account Password
+  AccountLogin = 'dfjkdfjd@yahoo.com';        // Runescape Account Login
+  AccountPassword = 'shan123';     // Runescape Account Password
   AccountPIN = '';          // Runescape Bank Pin
   DebugMode = False;        // Debug script ?
   RepositionMode = False;       // Attempt to reposition to find Ali ?
   TakeBreakMode = False;    // Take for a break ?
-  S_MouseSpeed = 45;       // SRL's MouseSpeed, the bigger the faster. Default : 15
-  S_World = [353, 366, 373, 361, 317, 319, 321, 345, 352, 357, 360, 374, 325, 373, 318, 365];             // World you would like to be logged into
+  S_MouseSpeed = 65;       // SRL's MouseSpeed, the bigger the faster. Default : 15
+  S_World = [348];             // World you would NOT like to be logged into
 
   MouseWait = 75; // Wait between moving mouse and clicking; and after clicking
   //  Optimal Values:
@@ -48,7 +48,7 @@ Const                                      //
   //  - 50:  Incredibly Fast
   //  - 1000: Human-like
 
-  Multi = 1.5;   // (Multiplier for random wait times)
+  Multi = 1.2;   // (Multiplier for random wait times)
   //  Wait(RandomRange(W1, Round(Multi * W1)));
   //  1.2: The lowest you should go
   //  2.0: The highest you should go
@@ -75,6 +75,11 @@ begin
   SRL_DisableIPLog := True;
 end;
 
+type
+  TOCRWorld = record
+    color, bcolor, percent: Integer; // world color, background color, background color percent
+  end;
+
 Var
   TimeToBreak, StartTime: Integer;
   S_TR: Extended;
@@ -93,6 +98,9 @@ Var
 
   Runes, ShopRunes: Array of String;
   RunesBMP, ShopRunesBMP: Array of Integer;
+  Worlds: TIntegerArray;
+  WorldBoxes: TBoxArray;
+  TOCRWorlds : Array of TOCRWorld;
 
 Const
   C_YELLOWBLOCK = 114921;
@@ -169,6 +177,105 @@ End;
 procedure Debug(Message: String);
 begin
   if DebugMode then Writeln(Message);
+end;
+
+function GridColorBoxFirst(colors, tols : TIntegerArray; area: TBox) : TBox;
+var
+  tpa: TPointArray;
+  i,xe,ye :Integer;
+  b: Boolean;
+begin
+  b := false;
+  for i := area.X1 to area.X2 do
+  begin
+    tpa := ReturnTPAExceptColors(colors, tols, IntToBox(i + 1, area.Y1, i + 1, area.Y2));
+    if Length(tpa) > 0 then
+    begin
+      b := true;
+    end else
+    begin
+      if b then
+      begin
+        xe := i;
+        break;
+      end;
+    end;
+  end;
+  //
+  b := false;
+  for i := area.Y1 to area.Y2 do
+  begin
+    tpa := ReturnTPAExceptColors(colors, tols, IntToBox(area.X1, i + 1, area.X2, i + 1));
+    if Length(tpa) > 0 then
+    begin
+      b := true;
+    end else
+    begin
+      if b then
+      begin
+        ye := i;
+        break;
+      end;
+    end;
+  end;
+  result := IntToBox(area.X1, area.Y1, xe, ye);
+  Debug('box first : ' + toStr(Result));
+end;
+
+procedure GridColorBoxDist(var dx, dy : Integer; colors, tols : TIntegerArray; area: TBox);
+var
+  tpa: TPointArray;
+  i :Integer;
+begin
+  //
+  dx := 0;
+  for i := area.X1 to area.X2 do
+  begin
+    tpa := ReturnTPAExceptColors(colors, tols, IntToBox(i + 1, area.Y1, i + 1, area.Y2));
+    if Length(tpa) > 0 then
+    begin
+      break;
+    end else
+    begin
+      dx := dx + 1;
+    end;
+  end;
+  //
+  dy := 0;
+  for i := area.Y1 to area.Y2 do
+  begin
+    tpa := ReturnTPAExceptColors(colors, tols, IntToBox(area.X1, i + 1, area.X2, i + 1));
+    if Length(tpa) > 0 then
+    begin
+      break;
+    end else
+    begin
+      dy := dy + 1;
+    end;
+  end;
+  Debug('box dist : ' + toStr(dx) + ',' + toStr(dy));
+end;
+
+function GridColorBox(cols, tols: TIntegerArray; area: TBox) : TBoxArray;
+var
+  tpa: TPointArray;
+  tb, first: TBox;
+  dx, dy, w, h, c, r:Integer;
+begin
+  tpa := ReturnTPAExceptColors(cols, tols, area);
+  tb := GetTPABounds(tpa);
+  first := GridColorBoxFirst(cols, tols, tb);
+  GridColorBoxDist(dx, dy, cols, tols, IntToBox(first.X2, first.Y2, tb.X2, tb.Y2));
+  //
+  w := first.X2 - first.X1 + 1;
+  h := first.Y2 - first.Y1 + 1;
+  dx := w + dx;
+  dy := h + dy;
+  c := Ceil((tb.X2 - tb.X1 + dx) div (dx));
+  r := Ceil((tb.Y2 - tb.Y1 + dy) div (dy));
+  Debug('box grid : ' + toStr(c) + ',' + toStr(r) + ',' + toStr(w) + ',' + toStr(h) + ',' + toStr(dx) + ',' + toStr(dy));
+  //
+  result := Grid(c, r, w, h, dx, dy, MiddleBox(first));
 end;
 
 function StoreScreen: Boolean;
@@ -307,57 +414,87 @@ Begin
   Result := True;
 End;
 
-function RandomWorld(Members: Boolean; PVP: Boolean = False): Integer; overload;
-Const
-  PVPW = [325, 337];
-  FreeW = [301, 308, 316, 326, 335, 381, 382, 383, 384, 385, 393, 394];
-  MembW = [302, 303, 304, 305, 306, 309, 310, 311, 312, 313, 314, 317,
-            318, 319, 320, 321, 322, 327, 328, 329, 330, 333, 334, 336,
-            338, 341, 342, 343, 344, 345, 346, 349, 350, 351, 352, 353,
-            354, 357, 358, 359, 360, 361, 362, 365, 366, 367, 368, 369,
-            370, 373, 374, 375, 376, 377, 378, 386];
+function RandomOneWorld(): Integer;
 var
-  Worlds: TIntegerArray;
+  l, w : Integer;
 begin
-  If Members then
-    Worlds := MembW
-  else
-    Worlds := FreeW;
-  If (Members) and (PVP) then
-    Worlds := CombineIntArray(PVPW, MembW);
+  l := Length(Worlds);
+  w := Worlds[Random(l)];
+  while w = -1 do
+    w := Worlds[Random(l)];
+  result := w;
+end;
 
-  Result := Worlds[Random(Length(Worlds))];
+function WorldNumber(box: TBox; color, bcolor, percent: Integer) : Integer;
+var
+T2DPA: T2DPointArray;
+TPA: TPointArray;
+B: TBox;
+txt: String;
+begin
+  // group background color match, e.g. : member ~= clYellow, 25% or more
+  FindColorsTolerance(TPA, bcolor , box.X1, box.Y1, box.X2, box.Y2, 20);
+  if (Length(TPA) * 100 / Length(TPAFromBox(box))) < percent then
+  begin
+    result := -1;
+    Debug(toStr(box) + ' [' + toStr(result) + ']');
+    exit;
+  end;
+  // real world
+  txt := GetNumbers(GetTextAtEx(box.X1 - 5, box.Y1 - 5, box.X2 + 5, box.Y2 + 5, 0, 5, 0, color, 10, 'UpChars07'));
+  if length(txt) = 0 then
+    result := -1
+  else
+    result := StrToInt(GetNumbers(txt));
+  Debug(toStr(box) + ' [' + toStr(result) + ']');
+end;
+
+function WorldNumbers(boxes : TBoxArray) : TIntegerArray;
+var
+  bL, tL, i, j : Integer;
+  TB : TBox;
+  tw : TOCRWorld;
+begin
+  tL := Length(TOCRWorlds) -1;
+  bL := Length(boxes);
+  setLength(Result, bL);
+  for i := 0 to (bL - 1) do
+  begin
+    for j := 0 to tL do
+    begin
+      tw := TOCRWorlds[j];
+      Result[i] := WorldNumber(boxes[i], tw.color, tw.bcolor, tw.percent);
+    end;
+  end;
+  Debug(toStr(length(Result)) + ' worlds info : ' + toStr(Result));
+end;
+
+function WorldFull(tb : TBox) : Boolean;
+var
+  txt: String;
+begin
+  txt := GetTextAtExWrap(tb.x1, tb.y1, tb.x2, tb.y2, 0, 4, 2, clWhite, 10, 'StatChars07');
+  result:= arrinstr(['FULL','ENLL','FNLL','EULL'],txt);
+  Debug('world stats : ' + toStr(txt) + ', full : ' + toStr(result));
+end;
+
+procedure WorldInit(var w: TIntegerArray; var wb : TBoxArray);
+begin
+  if Length(WorldBoxes) > 0 then exit;
+  wb := GridColorBox([clBlack], [5], IntToBox(0, 25, 764, 502));
+  w := WorldNumbers(wb);
 end;
 
 function SelectWorld(World: Integer): Boolean; override;
-const
-  Worlds: TIntegerArray = [301, 321, 345, 369,
-                           302, 322, 346, 370,
-                           303, 325, 349, 373,
-                           304, 326, 350, 374,
-                           305, 327, 351, 375,
-                           306, 328, 352, 376,
-                           308, 329, 353, 377,
-                           309, 330, 354, 378,
-                           310, 333, 357, 381,
-                           311, 334, 358, 382,
-                           312, 335, 359, 383,
-                           313, 336, 360, 384,
-                           314, 337, 361, 385,
-                           316, 338, 362, 386,
-                           317, 341, 365, 393,
-                           318, 342, 366, 394,
-                           319, 343, 367, -1,
-                           320, 344, 368, -1];
+// '-1' for unsupport world
 var
   I, T: Integer;
   TB: TBox;
 begin
-  if (not InIntArrayEx(Worlds, I, World)) or (Not WorldScreen) then
-    Exit(False);
-  Wait(RandomRange(250, 500));
-  TB := GridBox(I + 1, 4, 18, 87, 18, 93, 24, Point(242, 58));
-  mousebox(TB.X1, TB.Y1, TB.X2, TB.Y2, mouse_Left);
+  if not InIntArrayEx(Worlds, I, World) then exit(False);
+  TB := WorldBoxes[I];
+  if WorldFull(TB) then exit(false);
+  mousebox(TB.X1 + 5, TB.Y1 + 3, TB.X2 - 5, TB.Y2 - 3, mouse_Left);
   T := GetSystemTime + RandomRange(5000, 5500);
   while (WorldScreen) and (T < GetSystemTime) do
     Wait(RandomRange(100, 200));
@@ -385,15 +522,19 @@ Begin
 
     T := GetSystemTime + RandomRange(10000, 12000);
     repeat
-      Repeat
-        W := RandomWorld(True, False);
-      Until Not InIntArray(S_World, W);
-      Debug('Trying next world ' + IntToStr(W) + '.');
-      if OpenWorldScreen Then SelectWorld(W);
-      if CurrentWorldLS = W then
-        Debug('Successully switched to world ' + IntToStr(W) + '.');
+      if OpenWorldScreen Then
+      begin
+        if not WorldsOrdered then OrderWorlds;
+        WorldInit(Worlds, worldBoxes);
+        Repeat
+          W := RandomOneWorld();
+        Until not InIntArray(S_World, W);
+        SelectWorld(W);
+      end;
       if GetSystemTime > T then break;
     until CurrentWorldLS = W;
+
+    Debug('Trying select world [' + IntToStr(W) + '] switched to world [' + IntToStr(CurrentWorldLS) + '].');
 
     if CurrentWorldLS = W Then
     begin
@@ -447,7 +588,7 @@ End;
 //===== Main.simba Include =====================================================
 //==============================================================================
 
-Procedure Report;
+procedure Report;
 begin
   S_TR := S_TR + (GetSystemTime - StartTime);
   StartTime := GetSystemTime;
@@ -1404,6 +1545,17 @@ Begin
   End;
 End;
 
+Procedure DeclareWorldsDescribe;
+begin
+  setLength(TOCRWorlds, 1);
+  With TOCRWorlds[0] Do
+  Begin
+    color       := clBlack;
+    bcolor      := 3628149;
+    percent     := 3;
+  End;
+end;
+
 Procedure SetVariables;
 Var
   A, B: Integer;
@@ -1453,6 +1605,9 @@ begin
   End;
 
   AddOnTerminate('FreeRuneBMPs');
+
+  //
+  DeclareWorldsDescribe;
 end;
 
 Procedure ScriptSetup;
@@ -1505,8 +1660,7 @@ Begin
       FailCount(True, '');
       PuzzlesSolved := PuzzlesSolved + 1;
       Report;
-      //SwichWorld;
-      Wat(2500, 3500);
+      SwichWorld;
     End Else Begin
       ClosePuzzle;
       CloseStore;
