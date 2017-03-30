@@ -240,7 +240,7 @@ begin
       if OpenWorldScreen then
       begin
         if not WorldsOrdered then OrderWorlds;
-        WorldInit(Worlds, worldBoxes, TWorldColors);
+        WorldInit(Worlds, worldBoxes, ['memeber']);
         repeat
           W := RandomOneWorld();
         until not InIntArray(S_World, W);
