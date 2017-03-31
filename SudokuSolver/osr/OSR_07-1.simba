@@ -78,7 +78,6 @@ var
   RunesBMP, ShopRunesBMP: Array of Integer;
   Worlds: TIntegerArray;
   WorldBoxes: TBoxArray;
-  TWorldColors: Array of TWorldColor;
 
 const
   C_YELLOWBLOCK = 114921;
@@ -109,39 +108,6 @@ begin
     Member      := True;
   end;
   SRL_DisableIPLog := True;
-end;
-
-procedure DeclareWorldsDescribe;
-begin
-  setLength(TWorldColors, 4);
-  // member
-  with TWorldColors[0] do
-  begin
-    color       := clBlack;
-    bcolor      := 3628149;
-    percent     := 3;
-  end;
-  // free
-  with TWorldColors[1] do
-  begin
-    color       := clBlack;
-    bcolor      := 11513775;
-    percent     := 3;
-  end;
-  // pvp
-  with TWorldColors[2] do
-  begin
-    color       := clBlack;
-    bcolor      := 3618727;
-    percent     := 3;
-  end;
-  // dead
-  with TWorldColors[3] do
-  begin
-    color       := clRed;
-    bcolor      := clBlack;
-    percent     := 35;
-  end;
 end;
 
 procedure Debug(Message: String);
@@ -240,7 +206,7 @@ begin
       if OpenWorldScreen then
       begin
         if not WorldsOrdered then OrderWorlds;
-        WorldInit(Worlds, worldBoxes, TWorldColors);
+        WorldReader(Worlds, worldBoxes, ['member']);
         repeat
           W := RandomOneWorld();
         until not InIntArray(S_World, W);
@@ -1311,8 +1277,6 @@ begin
   end;
 
   AddOnTerminate('FreeRuneBMPs');
-
-  DeclareWorldsDescribe;
 end;
 
 procedure ScriptSetup;
