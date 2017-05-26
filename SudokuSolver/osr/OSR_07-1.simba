@@ -32,7 +32,7 @@ const
 
 //===== Script Setup =======================
   PuzzleSize = 'Large';     // Large: Need ~2M/hr, Small: Need ~100k/hr
-  DebugMode = True;        // Debug script ?
+  DebugMode = False;        // Debug script ?
   RepositionMode = false;       // Attempt to reposition to find Ali ?
   TakeBreakMode = false;    // Take for a break ?
   S_MouseSpeed = 65;       // SRL's MouseSpeed, the bigger the faster. Default : 15
