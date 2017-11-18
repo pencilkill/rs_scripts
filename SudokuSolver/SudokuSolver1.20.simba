@@ -1,0 +1,1179 @@
+/////////////////////////////////////////////
+//////                                 //////
+//             Sudoku Solver               //
+//                                         //
+//                                         //
+// --------------------------------------- //
+//                                         //
+//           *Instructions*                //
+//                                         //
+//  + Fill out account setup               //
+//  + Start east of Ali                    //
+//  + Run the script                       //
+//                                         //
+/////////////////////////////////////////////
+program SudokuSolver;                      //
+{$DEFINE SMART}              // Always have this to load smart
+{$I SRL-6/SRL.simba}         // To load the SRL include files
+
+Const                                      //
+/////////////////////////////////////////////
+//===========================================
+//===== Account Setup =======================
+  Ver = 'V1.20';
+                            // Large: Need ~2M/hr to run
+  PuzzleSize = 'Large';     // Small: Need ~100k/hr to run
+  AccountLogin = 'ddgsdd40adakgjw@yahoo.com';        // Runescape Account Login
+  AccountPassword = 'shan123';     // Runescape Account Password
+  AccountPIN = '';          // Runescape Bank Pin
+  DebugMode = True;        // Debug script ?
+  Reposition = True;       // Attempt to reposition to find Ali?
+  Relogin = False;         // Required exit after puzzle sovled ?
+  S_MouseSpeed = 100;       // SRL's MouseSpeed
+  S_World = 37;             // World you would like to be logged into
+
+  MouseWait = 25; // Wait between moving mouse and clicking; and after clicking
+  //  Optimal Values:
+  //  - 1:  Incredibly Fast
+  //  - 75: Human-like
+
+  W1 = 5;        // Wait between placing each rune on the puzzle
+  //  Optimal Values:
+  //  - 5:  Incredibly Fast
+  //  - 50: Human-like
+
+  W2 = 50;       // Wait between picking each rune to place
+  //  Optimal Values:
+  //  - 50:  Incredibly Fast
+  //  - 1000: Human-like
+
+  Multi = 1.2;   // (Multiplier for random wait times)
+  //  Wait(RandomRange(W1, Round(Multi * W1)));
+  //  1.2: The lowest you should go
+  //  2.0: The highest you should go
+
+//===== Account Setup =======================
+//===========================================
+
+//===========================================
+//===== Don't Edit Any Further ==============
+//===========================================
+
+Var
+  Player: TPlayer;
+  TimeToBreak, StartTime: Integer;
+  S_TR: Extended;
+
+  F_Count: Integer;
+  F_String: String;
+  Solved: Boolean;
+
+  Puzzle: Array of Array of Integer;
+  PuzzleSizeS: String;
+  PossibleValues: Array of Array of Array of Integer;
+  PuzzlesSolved: Integer;
+  BoxHeight, BoxWidth, sBoxHeight, sBoxWidth: Integer;
+  BoxDistX, BoxDistY, sBoxDistX, sBoxDistY: Integer;
+  PuzzleX1, PuzzleY1, sPuzzleX1, sPuzzleY1: Integer;
+  smallOrder: Array of TIntegerArray;
+
+  DTM_CACTUS, DTM_ALI_MORRISANE: Integer;
+
+  C_Mind, C_Mind2, C_Fire, C_Air, C_Water, C_Earth: Integer;
+  C_Body, C_Body2, C_Death, C_Death2, C_Chaos, C_Chaos2, C_Law: Integer;
+
+Const
+  C_YELLOWBLOCK = 114921;
+  C_ORANGEBLOCK = 498170;
+
+//==============================================================================
+//===== Main.simba Include =====================================================
+//==============================================================================
+procedure DeclarePlayers();
+begin
+  setLength(players, 1);
+  with players[0] do
+  begin
+    loginName   := AccountLogin;
+    password    := AccountPassword;
+    bankPin     := AccountPIN;
+    world       := S_World;
+    isActive    := True;
+    isMember    := True;
+  end;
+  currentPlayer := 0;
+  //
+  Player := players[currentPlayer];
+end;
+
+Procedure Wat(WAIT1, WAIT2: Integer);
+Begin
+  Wait(RandomRange(WAIT1, WAIT2));
+End;
+
+Procedure MMose(X, Y, Xr, Yr: Integer);
+Begin
+  mouseOval(X + RandomRange(-Xr, Xr), Y + RandomRange(-Yr, Yr), 0, 0);
+End;
+
+Procedure Mose(X, Y, Xr, Yr: Integer; Button: Variant);
+var
+  B, C: Integer;
+  iButton: Integer;
+Begin
+  MMose(X, Y, Xr, Yr);
+  Wat(MouseWait, Round(MouseWait * 1.5));
+  if (varType(button) = varBoolean) then
+  begin
+    if (button) then
+      iButton := mouse_left
+    else
+      iButton := mouse_right;
+  end else
+    iButton := button;
+  if (iButton = mouse_move) then Exit; { we aren't actually clicking! }
+  GetMousePos(B, C);
+  HoldMouse(B, C, iButton);
+  Wat(75, 100);
+  GetMousePos(B, C);
+  ReleaseMouse(B, C, iButton);
+  Wat(MouseWait, Round(MouseWait * 1.5));
+End;
+
+Function DoCondition(TimeOut, WaitPer: Integer; Funct: Function: Boolean; Condition: Function: Boolean; Normal: Boolean): Boolean;
+Var
+  T: Integer;
+Begin
+  T := GetSystemTime + TimeOut;
+  If Normal Then
+  Begin
+    Repeat
+      Funct();
+      If (not Condition()) Then Wait(RandomRange(WaitPer, Round(WaitPer * 1.5)));
+      If (GetSystemTime > T) Then Exit;
+    Until(Condition())
+  End Else Begin
+    Repeat
+      Funct();
+      If Condition() Then Wait(RandomRange(WaitPer, Round(WaitPer * 1.5)));
+      If (GetSystemTime > T) Then Exit;
+    Until(Not Condition())
+  End;
+  Result := True;
+End;
+
+Function CustomLogin: Boolean;
+Begin
+  Result := isLoggedIn;
+  if Result then Exit;
+
+  Result := Player.login();
+End;
+
+Function LogMeIn: Boolean;
+Begin
+  Result := DoCondition(300000, 30000, @CustomLogin, @isLoggedIn, True);
+
+  minimap.setAngle(MM_DIRECTION_NORTH);  // Make compass north and angle high
+  mainScreen.setAngle(MS_ANGLE_HIGH);
+End;
+
+Function GetPrice(ItemName: String; ID: Integer): Integer;
+Var
+  TempString: String;
+  TempData: Variant;
+Begin
+  TempString := UpperCase(Copy(ItemName, 1, 1)) + LowerCase(Copy(ItemName, 2, Length(ItemName)));
+  TempData := StrToFloat(Between('<td class="price">', '<', Between('?obj=' + IntToStr(ID) + '">' + TempString + '</a>', '</tr>', Getpage('http://itemdb-rs.runescape.com/results.ws?query=' + TempString))));
+  If Not (TempData = '') Then TempData := StrToInt(TempData);
+  If VarType(TempData) = varInteger Then
+    Result := TempData
+  Else
+    Result := 0;
+End;
+//==============================================================================
+//===== Main.simba Include =====================================================
+//==============================================================================
+
+procedure Dev(Message: String);
+begin
+  if DebugMode then Writeln(Message);
+end;
+
+Procedure Report;
+begin
+  S_TR := S_TR + (GetSystemTime - StartTime);
+  StartTime := GetSystemTime;
+  if (not DebugMode) then ClearDebug;
+  Writeln('____________Smurgs SudokuSolver ' + Ver + '____________');
+  Writeln('');
+  Writeln('Puzzles Solved: ' + FloatToStr(PuzzlesSolved) + ' (' + FloatToStr(PuzzlesSolved / (S_TR / 1000.0 / 60.0 / 60.0)) + ' puzzles/hr)');
+  Writeln('Time running: ' + MSToTime(Round(S_TR), 0));
+  Writeln('Time until break: ' + MSToTime(TimeToBreak - GetSystemTime, 0));
+  Writeln('_________________________________________________');
+end;
+
+Procedure EndScript(Message: String);
+begin
+  DoCondition(30000, 5000, @CustomLogin, @isLoggedIn, False);
+  Report;
+  Writeln(Message);
+  TerminateScript;
+end;
+
+Function BreakTime: Boolean;
+begin
+  Result := (GetSystemTime > TimeToBreak);
+end;
+
+Function PopUps: Boolean;
+Begin
+  If Not isLoggedIn Then Exit;
+  Result := (CountColorTolerance(5382947, 300, 80, 505, 300, 25) > 1500);
+  If Result Then
+  Begin
+    Mose(498, 69, 1, 1, True);
+  End;
+End;
+
+Procedure TakeBreak;
+begin
+  Writeln('Time for a break');
+  S_TR := S_TR + (GetSystemTime - StartTime);
+
+  DoCondition(30000, 5000, @Player.exitToLobby, @lobby.isOpen, True);
+  Wait(RandomRange(30 * 1000, 60 * 1000));
+  DoCondition(30000, 5000, @CustomLogin, @isLoggedIn, True);
+  TimeToBreak := GetSystemTime + (845 * 60 * 1000) + RandomRange((-5 * 60 * 1000), (5 * 60 * 1000));
+
+  StartTime := GetSystemTime;
+end;
+
+Procedure FailCount(Reset: Boolean; FType: String);
+Begin
+  If Reset Then
+  Begin
+    F_Count := 0;
+    F_String := '';
+    Dev('Reset Fail Count');
+  End Else Begin
+    F_Count := F_Count + 1;
+    F_String := F_String + FType +  '. ';
+    Dev('Added 1 to Fail Count');
+  End;
+
+  If F_Count > 7 Then EndScript(F_String);
+End;
+
+Function SudokuScreen: Boolean;
+Begin
+  Result := GetColor(512, 335) = 797794;
+  //If Result Then Dev('In Sudoku Screen') Else Dev('Not In Sudoku Screen');
+End;
+
+Function ClosePuzzle: Boolean;
+Var
+  N, T: Integer;
+Begin
+  If Not (isLoggedIn And SudokuScreen) Then Exit;
+
+  N := 0;
+  Repeat
+    If LowerCase(PuzzleSizeS) = 'large' Then
+    Begin
+      Mose(48, 48, 2, 2, True);
+    End Else If LowerCase(PuzzleSizeS) = 'small' Then
+    Begin
+      Mose(525, 45, 2, 2, True);
+    End;
+    T := GetSystemTime + 5000;
+    Repeat
+      If GetSystemTime > T Then Break;
+      Wat(10, 25);
+    Until Not SudokuScreen
+    If N > 3 Then Exit;
+    Inc(N);
+  Until Not SudokuScreen;
+
+  Result := True;
+End;
+
+Function RepositionAli: Boolean;
+Var
+  T, X, Y: Integer;
+  Ang: Extended;
+Begin
+  If minimap.findDTM(DTM_CACTUS, X, Y) Then
+  Begin
+    Dev('--------------- We are repositioning Ali --------------');
+    Mose(X, Y, 0, 0, True);
+    minimap.waitFlag();
+    Result := minimap.waitPlayerMoving();
+  End;
+End;
+
+Function TalkToAli: Boolean;
+Var
+  ATPA: T2DPointArray;
+  TPA: TPointArray;
+  TP: TPoint;
+  Found, Selected: Boolean;
+  X, Y, N, T, T2: Integer;
+  ChatText: Array of Array of String;
+Begin
+
+  Found := False;
+  Repeat
+    If Not isLoggedIn Then Exit;
+    ClosePuzzle;
+    Dev('Try to find Ali in area ' + toStr(mainScreen.getBounds()));
+    findDTMs(DTM_ALI_MORRISANE, TPA, mainScreen.getBounds());
+    Dev('Find Ali TPA ' + toStr(TPA));
+    If length(TPA) > 0 Then
+    Begin
+      //mainScreen.filterPointsPlayer(TPA);
+      ATPA := ClusterTPA(TPA, 50);
+      Dev('Find Ali ATPA ' + toStr(ATPA));
+      //SortATPAFrom(ATPA, mainScreen.playerPoint);
+      For N := 0 to High(ATPA) Do
+      Begin
+        TP := MiddleTPA(ATPA[N]);
+        MMose(TP.X, TP.Y, 1, 1);
+        GetMousePos(TP.X, TP.Y);
+        Wat(200, 500);
+        If isMouseOverText(['alk-to Ali', 'o Ali', 'o Al']) Then
+        Begin
+          Mose(TP.X, TP.Y, 0, 0, False);
+          If chooseOption.select(['alk-to Ali', 'o Ali', 'o Al']) Then
+          Begin
+            Found := True;
+            Break;
+          End;
+        End;
+      End;
+    End;
+    //
+    If Not Found Then
+    Begin
+      FailCount(False, 'Could not find Ali');
+      If Reposition Then
+      Begin
+        If Not RepositionAli Then
+        Begin
+          FailCount(False, 'Could not reposition');
+          minimap.setAngle(MM_DIRECTION_NORTH);  // Make compass north and angle high
+          mainScreen.setAngle(MS_ANGLE_HIGH);
+        End;
+      End;
+      Continue;
+    End;
+  Until Found;
+
+  Selected := false;
+  T := GetSystemTime + RandomRange(58500, 60008);
+  Repeat
+    Wat(5, 10);
+    conversationBox.continue(True, True);
+    Wat(50, 100);
+    if conversationBox.findOption(['look at', 'ook at']) then
+    begin
+      Selected := true;
+      break;
+    end;
+  Until GetSystemTime > T;
+
+  if not Selected then
+  begin
+    result := false;
+    exit;
+  end;
+
+  ChatText := [['selec', 'on of', 'unes'], [''], ['amin', 'ne loc', 'ne lo']];
+  If (LowerCase(PuzzleSizeS) = 'large') Then
+  Begin
+    ChatText[1] := ['arge'];
+  End Else
+  Begin
+    ChatText[1] := ['mall'];
+  End;
+
+  For N := 0 To (Length(ChatText) - 1) Do
+  Begin
+    T2 := GetSystemTime + RandomRange(10000, 15000);
+    Repeat
+      conversationBox.continue(True, True);
+      If (GetSystemTime > T2) or (GetSystemTime > T) Then Exit;
+    Until conversationBox.selectOption(ChatText[N]);
+
+    T := GetSystemTime + RandomRange(28500, 30008);
+  End;
+
+  Repeat
+    If GetSystemTime > T Then Exit;
+    Result := SudokuScreen;
+    Wat(5, 10);
+  Until Result;
+  Wat(250, 500);
+  Dev('Finished talking to Ali. In Sudoku Puzzle');
+End;
+
+procedure RemoveElement(var A: TIntegerArray; ToRemove: Integer);
+Var
+  N, AHigh: Integer;
+  Swapped: Boolean;
+begin
+  AHigh := High(A);
+  For N := 0 to AHigh Do
+    If A[N] = ToRemove Then
+    Begin
+      Swap(A[N], A[AHigh]);
+      Swapped := True;
+    End;
+  If Swapped Then SetLength(A, AHigh);
+end;
+
+// 0: Empty  (Else)
+// 1: Mind   (Mind, Mind2 > #)
+// 2: Fire   (Fire > #)
+// 3: Air    (Air > # and Death2 = 0)
+// 4: Water  (Water > #)
+// 5: Earth  (Earth > #)
+// 6: Body   (Body, Body2 > #)
+// 7: Death  (Death, Death2 > #)
+// 8: Chaos  (Chaos, Chaos2 > #)
+// 9: Law    (Law > #)
+
+Function GetRune(R, C: Integer): Integer;
+Var
+  X, Y: Integer;
+Begin
+  X := PuzzleX1 + C * BoxDistX;
+  Y := PuzzleY1 + R * BoxDistY;
+  Result := 0;
+  If (CountColorTolerance(C_Mind, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 25) Then
+    Result := 1
+  Else If (CountColorTolerance(C_Fire, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 135) Then
+    Result := 2
+  Else If ((CountColorTolerance(C_Air, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 150) And
+           (CountColorTolerance(C_Death2, X, Y, X + BoxWidth, Y + BoxHeight, 3) = 0)) Then
+    Result := 3
+  Else If (CountColorTolerance(C_Water, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 80) Then
+    Result := 4
+  Else If (CountColorTolerance(C_Earth, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 125) Then
+    Result := 5
+  Else If (CountColorTolerance(C_Body, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 25) Then
+    Result := 6
+  Else If (CountColorTolerance(C_Death, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 120) Then
+    Result := 7
+  Else If ((CountColorTolerance(C_Chaos, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 50) And
+           (CountColorTolerance(C_Chaos2, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 25)) Then
+    Result := 8
+  Else If (CountColorTolerance(C_Law, X, Y, X + BoxWidth, Y + BoxHeight, 3) > 125) Then
+    Result := 9;
+End;
+
+// 0: Empty
+// 1: Earth
+// 2: Water
+// 3: Air
+// 4: Fire
+
+Function GetSmallRune(R, C: Integer): Integer;
+Var
+  X1, Y1, X2, Y2: Integer;
+Begin
+  X1 := sPuzzleX1 + C * sBoxDistX;
+  Y1 := sPuzzleY1 + R * sBoxDistY;
+  X2 := X1 + sBoxWidth;
+  Y2 := Y1 + sBoxHeight;
+
+  Result := 0;
+
+  If (CountColorTolerance(C_Earth, X1, Y1, X2, Y2, 3) > 125) Then
+    Result := 1
+  Else If (CountColorTolerance(C_Water, X1, Y1, X2, Y2, 3) > 80) Then
+    Result := 2
+  Else If (CountColorTolerance(C_Air, X1, Y1, X2, Y2, 3) > 150) Then
+    Result := 3
+  Else If (CountColorTolerance(C_Fire, X1, Y1, X2, Y2, 3) > 135) Then
+    Result := 4;
+End;
+
+Procedure RemovePossibleValues(R, C, V: Integer);
+Var
+  A, B: Integer;
+Begin
+  Case R Of
+    0, 1, 2: Begin
+      Case C Of
+        0, 1, 2: Begin
+          For A := 0 to 2 Do
+            For B := 0 to 2 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        3, 4, 5: Begin
+          For A := 0 to 2 Do
+            For B := 3 to 5 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        6, 7, 8: Begin
+          For A := 0 to 2 Do
+            For B := 6 to 8 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+      End;
+    End;
+    3, 4, 5: Begin
+      Case C Of
+        0, 1, 2: Begin
+          For A := 3 to 5 Do
+            For B := 0 to 2 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        3, 4, 5: Begin
+          For A := 3 to 5 Do
+            For B := 3 to 5 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        6, 7, 8: Begin
+          For A := 3 to 5 Do
+            For B := 6 to 8 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+      End;
+    End;
+    6, 7, 8: Begin
+      Case C Of
+        0, 1, 2: Begin
+          For A := 6 to 8 Do
+            For B := 0 to 2 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        3, 4, 5: Begin
+          For A := 6 to 8 Do
+            For B := 3 to 5 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+        6, 7, 8: Begin
+          For A := 6 to 8 Do
+            For B := 6 to 8 Do
+              If Not (PossibleValues[A][B][0] = 0) Then
+                RemoveElement(PossibleValues[A][B], V);
+        End;
+      End;
+    End;
+  End;
+End;
+
+Function Contain(A: TIntegerArray; V: Integer): Boolean;
+Var
+  N: Integer;
+Begin
+  For N := 0 to High(A) Do
+    If A[N] = V Then
+    Begin
+      Result := True;
+      Exit;
+    End;
+End;
+
+Procedure SinglePosition(R, C: Integer);
+Var
+  A: Integer;
+Begin
+  For A := 0 to 8 Do
+    If Not (Puzzle[A][C] = 0) Then
+      RemoveElement(PossibleValues[R][C], Puzzle[A][C]);
+
+  For A := 0 to 8 Do
+    If Not (Puzzle[R][A] = 0) Then
+      RemoveElement(PossibleValues[R][C], Puzzle[R][A]);
+End;
+
+Procedure CandidateLines(Box: Integer);
+Var
+  A, B, N, N2, N3, N4, Count, XR, YR, H: Integer;
+  CTP: TPointArray;
+  BoxX, BoxY: TIntegerArray;
+  AlreadySolved: Boolean;
+Begin
+  SetLength(CTP, 9);
+  For N4 := 0 to 8 Do
+    CTP[N4] := point(-1, -1);
+  SetLength(BoxX, 3);
+  SetLength(BoxY, 3);
+  Case Box Of
+    0: Begin
+      BoxX := [0, 1, 2];
+      BoxY := [0, 1, 2];
+    End;
+    1: Begin
+      BoxX := [0, 1, 2];
+      BoxY := [3, 4, 5];
+    End;
+    2: Begin
+      BoxX := [0, 1, 2];
+      BoxY := [6, 7, 8];
+    End;
+    3: Begin
+      BoxX := [3, 4, 5];
+      BoxY := [0, 1, 2];
+    End;
+    4: Begin
+      BoxX := [3, 4, 5];
+      BoxY := [3, 4, 5];
+    End;
+    5: Begin
+      BoxX := [3, 4, 5];
+      BoxY := [6, 7, 8];
+    End;
+    6: Begin
+      BoxX := [6, 7, 8];
+      BoxY := [0, 1, 2];
+    End;
+    7: Begin
+      BoxX := [6, 7, 8];
+      BoxY := [3, 4, 5];
+    End;
+    8: Begin
+      BoxX := [6, 7, 8];
+      BoxY := [6, 7, 8];
+    End;
+  End;
+
+  For N := 1 to 9 Do
+  Begin
+    AlreadySolved := False;
+    For A := BoxX[0] to BoxX[2] Do
+      For B := BoxY[0] to BoxY[2] Do
+        If Puzzle[A][B] = N Then AlreadySolved := True;
+
+    If Not AlreadySolved Then
+    Begin
+      Count := 0;
+      SetLength(CTP, 9);
+      For N4 := 0 to 8 Do
+        CTP[N4] := point(-1, -1);
+      For A := BoxX[0] to BoxX[2] Do
+      Begin
+        For B := BoxY[0] to BoxY[2] Do
+        Begin
+          If (Contain(PossibleValues[A][B], N)) Then
+          Begin
+            CTP[Count] := point(A, B);
+            Count := Count + 1;
+          End;
+        End;
+      End;
+      If Count > 0 Then SetLength(CTP, Count);
+      If ((Count = 2) Or (Count = 3)) Then
+      Begin
+        H := High(CTP);
+        XR := CTP[0].X;
+        YR := CTP[0].Y;
+        For N2 := 1 to H Do
+        Begin
+          If Not (XR = CTP[N2].X) Then Break;
+          If ((N2 = H) And (XR = CTP[H].X)) Then
+          Begin
+            For N3 := 0 to 8 Do
+            Begin
+              If Contain(BoxY, N3) Then Continue;
+              RemoveElement(PossibleValues[XR][N3], N);
+            End;
+          End;
+        End;
+        For N2 := 1 to H Do
+        Begin
+          If Not (YR = CTP[N2].Y) Then Break;
+          If ((N2 = H) And (YR = CTP[H].Y)) Then
+          Begin
+            For N3 := 0 to 8 Do
+            Begin
+              If Contain(BoxX, N3) Then Continue;
+              RemoveElement(PossibleValues[N3][YR], N);
+            End;
+          End;
+        End;
+      End;
+    End;
+  End;
+End;
+
+Function SolveSudoku: Boolean;
+Var
+  N, R, C, B, T: Integer;
+  Done: Boolean;
+Begin
+  If Not (isLoggedIn And SudokuScreen) Then Exit;
+  T := GetSystemTime;
+
+  Dev(PuzzleSizeS);
+
+  Case LowerCase(PuzzleSizeS) Of
+    'small': Begin
+      C_Earth := GetColor(60, 330);
+      C_Water := GetColor(115, 335);
+      C_Air := GetColor(177, 333);
+      C_Fire := GetColor(225, 335);
+
+      For R := 0 to 3 Do
+        For C := 0 to 3 Do
+          smallOrder[R][C] := GetSmallRune(R, C);
+
+      //Writeln(smallOrder);
+
+      If Not (smallOrder[1][1] = 0) Then
+      Begin
+        smallOrder[0][0] := smallOrder[2][2];
+        smallOrder[0][1] := smallOrder[1][2];
+        smallOrder[0][2] := smallOrder[1][1];
+        smallOrder[0][3] := smallOrder[2][1];
+        smallOrder[1][0] := smallOrder[2][1];
+        smallOrder[1][3] := smallOrder[2][2];
+        smallOrder[2][0] := smallOrder[1][1];
+        smallOrder[2][3] := smallOrder[1][2];
+        smallOrder[3][0] := smallOrder[1][2];
+        smallOrder[3][1] := smallOrder[2][2];
+        smallOrder[3][2] := smallOrder[2][1];
+        smallOrder[3][3] := smallOrder[1][1];
+      End Else If Not (smallOrder[1][0] = 0) Then
+      Begin
+        smallOrder[0][0] := smallOrder[1][3];
+        smallOrder[0][1] := smallOrder[2][3];
+        smallOrder[0][2] := smallOrder[2][0];
+        smallOrder[0][3] := smallOrder[1][0];
+        smallOrder[1][1] := smallOrder[2][0];
+        smallOrder[1][2] := smallOrder[2][3];
+        smallOrder[2][1] := smallOrder[1][0];
+        smallOrder[2][2] := smallOrder[1][3];
+        smallOrder[3][0] := smallOrder[2][3];
+        smallOrder[3][1] := smallOrder[1][3];
+        smallOrder[3][2] := smallOrder[1][0];
+        smallOrder[3][3] := smallOrder[2][0];
+      End Else If Not (smallOrder[0][0] = 0) Then
+      Begin
+        smallOrder[0][1] := smallOrder[3][0];
+        smallOrder[0][2] := smallOrder[3][3];
+        smallOrder[1][0] := smallOrder[0][3];
+        smallOrder[1][1] := smallOrder[3][3];
+        smallOrder[1][2] := smallOrder[3][0];
+        smallOrder[1][3] := smallOrder[0][0];
+        smallOrder[2][0] := smallOrder[3][3];
+        smallOrder[2][1] := smallOrder[0][3];
+        smallOrder[2][2] := smallOrder[0][0];
+        smallOrder[2][3] := smallOrder[3][0];
+        smallOrder[3][1] := smallOrder[0][0];
+        smallOrder[3][2] := smallOrder[0][3];
+      End Else
+        Exit;
+
+      Done := True;
+      For R := 0 to 3 Do
+        For C := 0 to 3 Do
+          If smallOrder[R][C] = 0 Then Done := False;
+    End;
+    'large': Begin
+      C_Mind := GetColor(62, 138);
+      C_Mind2 := GetColor(64, 144);
+      C_Fire := GetColor(58, 192);
+      C_Air := GetColor(65, 238);
+      C_Water := GetColor(60, 291);
+      C_Earth := GetColor(64, 333);
+      C_Body := GetColor(101, 186);
+      C_Body2 := GetColor(114, 195);
+      C_Death := GetColor(107, 244);
+      C_Death2 := GetColor(109, 229);
+      C_Chaos := GetColor(114, 288);
+      C_Chaos2 := GetColor(108, 291);
+      C_Law := GetColor(109, 344);
+
+      For R := 0 to 8 Do
+      Begin
+        For C := 0 to 8 Do
+          Begin
+            Puzzle[R][C] := GetRune(R, C);
+            //Dev('(R:' + IntToStr(R) + ', C:' + IntToStr(C) + ') ' + IntToStr(Puzzle[R][C]));
+          End;
+      End;
+
+      //Writeln(Puzzle);
+
+      For R := 0 To 8 Do
+        For C := 0 To 8 Do
+          If Puzzle[R][C] = 0 Then PossibleValues[R][C] := [1, 2, 3, 4, 5, 6, 7, 8, 9]
+          Else Begin
+            SetLength(PossibleValues[R][C], 1);
+            PossibleValues[R][C] := [0];
+          End;
+
+      For N := 0 to 19 Do
+      Begin
+        For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            If Not (Puzzle[R][C] = 0) Then
+              RemovePossibleValues(R, C, Puzzle[R][C]);
+
+        For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            If ((Not Contain(PossibleValues[R][C], 0)) And (Length(PossibleValues[R][C]) = 1)) Then
+            Begin
+              Puzzle[R][C] := PossibleValues[R][C][0];
+              SetLength(PossibleValues[R][C], 1);
+              PossibleValues[R][C] := [0];
+            End;
+
+        {For R := 0 to 8 Do
+          Writeln(Puzzle[S]);
+        Writeln('Square');
+        For R := 0 to 8 Do
+          Writeln(PossibleValues[S]);
+        Writeln('***********');  }
+
+        For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            If (Puzzle[R][C] = 0) Then
+              SinglePosition(R, C);
+
+        For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            If ((Not Contain(PossibleValues[R][C], 0)) And (Length(PossibleValues[R][C]) = 1)) Then
+            Begin
+              Puzzle[R][C] := PossibleValues[R][C][0];
+              SetLength(PossibleValues[R][C], 1);
+              PossibleValues[R][C] := [0];
+            End;
+
+       { For R := 0 to 8 Do
+          Writeln(Puzzle[S]);
+        Writeln('Single Line');
+        For R := 0 to 8 Do
+          Writeln(PossibleValues[S]);
+        Writeln('***********');    }
+
+        For B := 0 to 8 Do
+          CandidateLines(B);
+
+        For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            If ((Not Contain(PossibleValues[R][C], 0)) And (Length(PossibleValues[R][C]) = 1)) Then
+            Begin
+              Puzzle[R][C] := PossibleValues[R][C][0];
+              SetLength(PossibleValues[R][C], 1);
+              PossibleValues[R][C] := [0];
+            End;
+
+        {For R := 0 to 8 Do
+          Writeln(Puzzle[S]);
+        Writeln('Candidate');
+        For R := 0 to 8 Do
+          Writeln(PossibleValues[S]);}
+
+        {For R := 0 to 8 Do
+          For C := 0 to 8 Do
+            Writeln(PossibleValues[R][C]);
+
+        Writeln('---------------------'); }
+
+        //Writeln(Puzzle);
+
+        Done := True;
+        For R := 0 to 8 Do
+        Begin
+          For C := 0 to 8 Do
+          Begin
+            If Puzzle[R][C] = 0 Then Done := False;
+          End;
+        End;
+
+        If Done Then Break;
+      End;
+    End;
+    Else
+      EndScript('Wrong size of puzzle entered');
+  End;
+  Dev('Completed Solve in ' + IntToStr(GetSystemTime - T) + ' milliseconds.');
+  If Done Then Result := True;
+End;
+
+Function PlaceRunes: Boolean;
+Var
+  N, A, B, T, X, Y: Integer;
+  BRune: TPointArray;
+  S: Boolean;
+Begin
+  If Not (isLoggedIn And SudokuScreen) Then Exit;
+
+  Dev('Placing runes into puzzle');
+
+  Case LowerCase(PuzzleSizeS) Of
+    'small': Begin
+      SetLength(Brune, 5);
+      T := GetSystemTime + RandomRange(30000, 45000);
+
+      Brune[1] := point(60, 330);
+      Brune[2] := point(113, 330);
+      Brune[3] := point(166, 330);
+      Brune[4] := point(219, 330);
+
+      For N := 1 to 4 Do
+      Begin
+        If GetSystemTime > T Then Exit;
+        Mose(BRune[N].X, BRune[N].Y, 5, 5, True);
+        Wat(Round(0.5 * W2), Round(Multi * 0.5 * W2));
+        For A := 0 to 3 Do
+          For B := 0 to 3 Do
+            If smallOrder[A][B] = N Then
+            Begin
+              X := sPuzzleX1 + B * sBoxDistX + 16;
+              Y := sPuzzleY1 + A * sBoxDistY + 16;
+              If Not((CountColorTolerance(C_YELLOWBLOCK, X - 15, Y - 15, X + 16, Y + 16, 5) > 300) or
+                     (CountColorTolerance(C_ORANGEBLOCK, X - 15, Y - 15, X + 16, Y + 16, 5) > 300)) Then Continue;
+              Mose(X, Y, 5, 5, True);
+              Wat(W1, Round(Multi * W1));
+            End;
+        Wat(Round(0.5 * W2), Round(Multi * 0.5 * W2));
+      End;
+      Result := True;
+
+      If Result Then
+      Begin
+        Dev('Solved Small Puzzle Correctly. Opening Casket.');
+        Wat(300, 500);
+        Mose(350, 340, 20, 3, True);
+      End;
+    End;
+    'large': Begin
+      SetLength(BRune, 10);
+      T := GetSystemTime + RandomRange(75000, 120000);
+
+      Brune[1] := point(55, 135);
+      Brune[2] := point(55, 185);
+      Brune[3] := point(55, 235);
+      Brune[4] := point(55, 285);
+      Brune[5] := point(55, 335);
+      Brune[6] := point(105, 185);
+      Brune[7] := point(105, 235);
+      Brune[8] := point(105, 285);
+      Brune[9] := point(105, 335);
+
+      For N := 1 to 9 Do
+      Begin
+        If GetSystemTime > T Then Exit;
+        Mose(BRune[N].X, BRune[N].Y, 5, 5, True);
+        Wat(Round(0.5 * W2), Round(Multi * 0.5 * W2));
+        For A := 0 to 8 Do
+          For B := 0 to 8 Do
+            If (Puzzle[A][B] = N) Then
+            Begin
+              X := PuzzleX1 + B * BoxDistX + 15;
+              Y := PuzzleY1 + A * BoxDistY + 15;
+              If Not((CountColorTolerance(C_YELLOWBLOCK, X - 15, Y - 15, X + 16, Y + 16, 5) > 400) or
+                     (CountColorTolerance(C_ORANGEBLOCK, X - 15, Y - 15, X + 16, Y + 16, 5) > 400)) Then Continue;
+              Mose(X, Y, 5, 5, True);
+              Wat(W1, Round(Multi * W1));
+            End;
+        Wat(Round(0.5 * W2), Round(Multi * 0.5 * W2));
+      End;
+      Result := True;
+
+      If Result Then
+      Begin
+        Dev('Solved Large Puzzle Correctly. Opening Casket.');
+        Wat(300, 500);
+        Mose(75, 95, 20, 3, True);
+      End;
+    End;
+    Else
+      EndScript('Wrong Size Puzzle Specified');
+  End;
+
+  T := GetSystemTime + 5500;
+  Repeat
+    Wat(10, 25);
+    If GetSystemTime > T Then
+    Begin
+      Result := False;
+      ClosePuzzle;
+      Exit;
+    End;
+  Until Not SudokuScreen
+End;
+
+Function CollectRunes: Boolean;
+Var
+  T: Integer;
+Begin
+  If Not isLoggedIn Or SudokuScreen Then Exit;
+  Dev('Collecting Runes');
+  T := GetSystemTime + RandomRange(1500, 2500);;
+  Repeat
+    Wat(5, 10);
+    If GetSystemTime > T Then Exit;
+  Until conversationBox.selectOption(['all']);
+  Repeat
+    Wat(5, 10);
+    If conversationBox.findOption(['ang']) Then
+      EndScript('Ran out of money');
+    If pinScreen.isOpen() Then pinScreen.enter(Player.bankPin);
+    If GetSystemTime > T Then Exit;
+  Until conversationBox.findChat(['leasur']);
+
+  Result := True;
+  If Result Then
+    Dev('Bought runes')
+  Else
+    Dev('Couldnt buy runes');
+End;
+
+Procedure VariableReset;
+Var
+  A, B: Integer;
+Begin
+  Solved := False;
+  SetLength(Puzzle, 9);
+  For A := 0 To 8 Do
+    SetLength(Puzzle[A], 9);
+
+  SetLength(PossibleValues, 9);
+  For A := 0 To 8 Do
+  Begin
+    SetLength(PossibleValues[A], 9);
+    For B := 0 to 8 Do
+      SetLength(PossibleValues[A][B], 9);
+  End;
+End;
+
+Procedure SetVariables;
+Var
+  A, B: Integer;
+begin
+  TimeToBreak := GetSystemTime + (330 * 60 * 1000) + RandomRange((-5 * 60 * 1000), (5 * 60 * 1000));
+  StartTime := GetSystemTime;
+
+  Solved := False;
+
+  BoxHeight := 31;
+  BoxWidth := 31;
+  sBoxHeight := 32;
+  sBoxWidth := 31;
+
+  BoxDistX := 37;
+  BoxDistY := 37;
+  sBoxDistX := 52;
+  sBoxDistY := 52;
+
+  PuzzleX1 := 146;
+  PuzzleY1 := 33;
+  sPuzzleX1 := 192;
+  sPuzzleY1 := 82;
+
+  Case LowerCase(PuzzleSize) Of
+    'large': Begin
+      PuzzleSizeS := 'large';
+
+      SetLength(Puzzle, 9);
+      For A := 0 To 8 Do
+        SetLength(Puzzle[A], 9);
+
+      SetLength(PossibleValues, 9);
+      For A := 0 To 8 Do
+      Begin
+        SetLength(PossibleValues[A], 9);
+        For B := 0 to 8 Do
+          SetLength(PossibleValues[A][B], 9);
+      End;
+    End;
+    'small': Begin
+      PuzzleSizeS := 'small';
+      SetLength(smallOrder, 4);
+      For A := 0 to 3 Do
+        SetLength(smallOrder[A], 4);
+    End;
+    Else EndScript('Puzzle size entered incorrectly');
+  End;
+
+  DTM_CACTUS := DTMFromString('mbQAAAHicY2VgYDjHxMCwEYgXAvE6IL4PxHOA4quBuAeIq4B4IhDvYYhlWLBkGcNjA1MGAQFBhp3SUgxcQHF0zIgFgwEAiQ4MPA==');
+  DTM_ALI_MORRISANE := DTMFromString('mLgAAAHicY2JgYFjCyMDQCcTbgOy7QPz//xWGj0EPGESAbCMgZoRiBgYA2fkIAg==');
+end;
+
+Procedure freeScriptDTMs;
+begin
+  freeDTMs([DTM_CACTUS, DTM_ALI_MORRISANE]);
+end;
+
+Procedure ScriptSetup;
+begin
+  //smartInitSeq := 's';  // Safe Mode
+  smartShowConsole := DebugMode;
+  disableSRLLog := (Not DebugMode);
+  disableSRLDebug := (Not DebugMode);
+  smartSetDebug(DebugMode);
+  ClearDebug;               // Clear the debug box
+  SetupSRL;                   // Load the SRL include files
+  DeclarePlayers;
+  mouseSpeed := S_MouseSpeed;
+
+  AddOnTerminate('freeScriptDTMs');
+end;
+
+Begin
+  ScriptSetup;
+  SetVariables;
+
+  if (not LogMeIn) then EndScript('Could not login pre-loop');
+
+  Repeat
+    if (not LogMeIn) then EndScript('Could not login in-loop');
+
+    //if BreakTime then TakeBreak;
+
+    if PopUps Then Wat(500, 750);
+
+    VariableReset;
+
+    If TalkToAli Then
+    Begin
+      If SolveSudoku Then
+      Begin
+        If PlaceRunes Then
+        Begin
+          If CollectRunes Then
+          Begin
+            Solved := True;
+          End Else Begin
+            Solved := False;
+            FailCount(False, 'Could not collect runes');
+          End;
+        End Else Begin
+          FailCount(False, 'Could not place runes');
+        End;
+      End Else Begin
+        FailCount(False, 'Could not solve the puzzle');
+      End;
+    End Else Begin
+      FailCount(False, 'Could not talk to Ali');
+    End;
+
+    If Solved Then
+    Begin
+      FailCount(True, '');
+      PuzzlesSolved := PuzzlesSolved + 1;
+      Report;
+      if Relogin then Player.exitToLobby;
+    End Else Begin
+      ClosePuzzle;
+      Dev('Current FailCount: ' + F_String);
+    End;
+
+  Until False;
+  TerminateScript;
+End.
