@@ -26,7 +26,7 @@ Const                                      //
   AccountLogin = 'reteqa36@hotmail.com';        // Runescape Account Login
   AccountPassword = 'hoo6878';     // Runescape Account Password
   AccountPIN = '';          // Runescape Bank Pin
-  DebugMode = False;        // Debug script ?
+  DebugMode = True;        // Debug script ?
   Reposition = True;       // Attempt to reposition to find Ali?
   S_MouseSpeed = 10;       // SRL's MouseSpeed
   S_World = 37;             // World you would like to be logged into

@@ -22,31 +22,32 @@ Const                                      //
 //===== Account Setup =======================
   Ver = 'V1.19';
                             // Large: Need ~2M/hr to run
-  PuzzleSize = 'Small';     // Small: Need ~100k/hr to run
-  AccountLogin = 'reteqa36@hotmail.com';        // Runescape Account Login
-  AccountPassword = 'hoo6878';     // Runescape Account Password
+  PuzzleSize = 'Large';     // Small: Need ~100k/hr to run
+  AccountLogin = 'ddgsdd40adakgjw@yahoo.com';        // Runescape Account Login
+  AccountPassword = 'shan123';     // Runescape Account Password
   AccountPIN = '';          // Runescape Bank Pin
   DebugMode = False;        // Debug script ?
   Reposition = True;       // Attempt to reposition to find Ali?
-  S_MouseSpeed = 10;       // SRL's MouseSpeed
+  Relogin = Fase;         // Required exit after puzzle sovled ?
+  S_MouseSpeed = 100;       // SRL's MouseSpeed
   S_World = 37;             // World you would like to be logged into
 
-  MouseWait = 75; // Wait between moving mouse and clicking; and after clicking
+  MouseWait = 25; // Wait between moving mouse and clicking; and after clicking
   //  Optimal Values:
   //  - 1:  Incredibly Fast
   //  - 75: Human-like
 
-  W1 = 50;        // Wait between placing each rune on the puzzle
+  W1 = 5;        // Wait between placing each rune on the puzzle
   //  Optimal Values:
   //  - 5:  Incredibly Fast
   //  - 50: Human-like
 
-  W2 = 500;       // Wait between picking each rune to place
+  W2 = 50;       // Wait between picking each rune to place
   //  Optimal Values:
   //  - 50:  Incredibly Fast
   //  - 1000: Human-like
 
-  Multi = 1.5;   // (Multiplier for random wait times)
+  Multi = 1.2;   // (Multiplier for random wait times)
   //  Wait(RandomRange(W1, Round(Multi * W1)));
   //  1.2: The lowest you should go
   //  2.0: The highest you should go
@@ -76,15 +77,15 @@ Var
   PuzzleX1, PuzzleY1, sPuzzleX1, sPuzzleY1: Integer;
   smallOrder: Array of TIntegerArray;
 
+  DTM_CACTUS, DTM_ALI_MORRISANE: Integer;
+
   C_Mind, C_Mind2, C_Fire, C_Air, C_Water, C_Earth: Integer;
   C_Body, C_Body2, C_Death, C_Death2, C_Chaos, C_Chaos2, C_Law: Integer;
 
 Const
-  C_ALI = 5648420;
   C_YELLOWBLOCK = 114921;
   C_ORANGEBLOCK = 498170;
 
-  DTM_CACTUS = 'mWAAAAHicY2FgYFjMxMBQDcRbgLgTiFuBYuVAXA/E04A4IdKO4bGBKcM1Z2eGBUuWMRgBxZAxIxoGAQBHVgrK';
 //==============================================================================
 //===== Main.simba Include =====================================================
 //==============================================================================
@@ -299,49 +300,41 @@ End;
 
 Function RepositionAli: Boolean;
 Var
-  D, T, X, Y: Integer;
+  T, X, Y: Integer;
   Ang: Extended;
 Begin
-  D := DTMFromString(DTM_CACTUS);
-  If minimap.findDTM(D, X, Y) Then
+  If minimap.findDTM(DTM_CACTUS, X, Y) Then
   Begin
     Dev('--------------- We are repositioning Ali --------------');
     Mose(X, Y, 0, 0, True);
     minimap.waitFlag();
     Result := minimap.waitPlayerMoving();
   End;
-  FreeDTM(D);
 End;
 
 Function TalkToAli: Boolean;
 Var
-  ATPA: Array of TPointArray;
+  ATPA: T2DPointArray;
   TPA: TPointArray;
   TP: TPoint;
   Found: Boolean;
-  N, T, T2, AliX1, AliY1, AliX2, AliY2: Integer;
+  X, Y, N, T, T2: Integer;
   ChatText: Array of Array of String;
 Begin
-  AliX1 := mainScreen.x1;
-  AliY1 := mainScreen.y1;
-  AliX2 := mainScreen.x2;
-  AliY2 := mainScreen.y2;
 
   Found := False;
-
   Repeat
     If Not isLoggedIn Then Exit;
     ClosePuzzle;
     Dev('Starting to talk to Ali');
-    SetColorToleranceSpeed(2);
-    SetToleranceSpeed2Modifiers(0.17, 1.18);
-    FindColorsSpiralTolerance(AliX1, AliY1, TPA, C_ALI, AliX1, AliY1, AliX2, AliY2, 15);
-    SetToleranceSpeed2Modifiers(0.2, 0.2);
-    SetColorToleranceSpeed(1);
-    ATPA := SplitTPA(TPA, 10);
-    SortATPASize(ATPA, True);
-    If Length(TPA) > 1 Then
+    findDTMs(DTM_ALI_MORRISANE, TPA, IntToBox(1, 1, 574, 387));
+    Dev('Find to talk to Ali TPA ' + toStr(TPA));
+    If length(TPA) > 0 Then
     Begin
+      //mainScreen.filterPointsPlayer(TPA);
+      ATPA := ClusterTPA(TPA, 50);
+      Dev('Find to talk to Ali ATPA ' + toStr(ATPA));
+      //SortATPAFrom(ATPA, mainScreen.playerPoint);
       For N := 0 to High(ATPA) Do
       Begin
         TP := MiddleTPA(ATPA[N]);
@@ -1096,11 +1089,20 @@ begin
     End;
     Else EndScript('Puzzle size entered incorrectly');
   End;
+
+  DTM_CACTUS := DTMFromString('mbQAAAHicY2VgYDjHxMCwEYgXAvE6IL4PxHOA4quBuAeIq4B4IhDvYYhlWLBkGcNjA1MGAQFBhp3SUgxcQHF0zIgFgwEAiQ4MPA==');
+  DTM_ALI_MORRISANE := DTMFromString('mLgAAAHicY2JgYFjCyMDQCcTbgOy7QPz//xWGj0EPGESAbCMgZoRiBgYA2fkIAg==');
+end;
+
+Procedure freeScriptDTMs;
+begin
+  freeDTMs([DTM_CACTUS, DTM_ALI_MORRISANE]);
 end;
 
 Procedure ScriptSetup;
 begin
   //smartInitSeq := 's';  // Safe Mode
+  smartShowConsole := DebugMode;
   disableSRLLog := (Not DebugMode);
   disableSRLDebug := (Not DebugMode);
   smartSetDebug(DebugMode);
@@ -1108,6 +1110,8 @@ begin
   SetupSRL;                   // Load the SRL include files
   DeclarePlayers;
   mouseSpeed := S_MouseSpeed;
+
+  AddOnTerminate('freeScriptDTMs');
 end;
 
 Begin
@@ -1153,7 +1157,7 @@ Begin
       FailCount(True, '');
       PuzzlesSolved := PuzzlesSolved + 1;
       Report;
-      Player.exitToLobby;
+      if Relogin then Player.exitToLobby;
     End Else Begin
       ClosePuzzle;
       Dev('Current FailCount: ' + F_String);

@@ -25,25 +25,30 @@ const
   Ver = 'V2.09';
 
 //===== Account Setup =======================
-  AccountLogin = 'dfjkdfjd@yahoo.com';        // Runescape Account Login
-  AccountPassword = 'shan123';     // Runescape Account Password
+  AccountLogin = 'a';        // Runescape Account Login
+  AccountPassword = 'b';     // Runescape Account Password
   AccountPIN = '';          // Runescape Bank Pin
 //===========================================
 
 //===== Script Setup =======================
   PuzzleSize = 'Large';     // Large: Need ~2M/hr, Small: Need ~100k/hr
-  DebugMode = False;        // Debug script ?
+  DebugMode = True;        // Debug script ?
   RepositionMode = false;       // Attempt to reposition to find Ali ?
   TakeBreakMode = false;    // Take for a break ?
   S_MouseSpeed = 65;       // SRL's MouseSpeed, the bigger the faster. Default : 15
   S_World = [348];             // World you would NOT like to be logged into
 
-  W1 = 50;        // Wait between placing each rune on the puzzle
+  MouseWait = 1; // Wait between moving mouse and clicking; and after clicking
+  //  Optimal Values:
+  //  - 1:  Incredibly Fast
+  //  - 75: Human-like
+
+  W1 = 5;        // Wait between placing each rune on the puzzle
   //  Optimal Values:
   //  - 5:  Incredibly Fast
   //  - 50: Human-like
 
-  W2 = 1000;       // Wait between picking each rune to place
+  W2 = 50;       // Wait between picking each rune to place
   //  Optimal Values:
   //  - 50:  Incredibly Fast
   //  - 1000: Human-like
@@ -113,6 +118,11 @@ end;
 procedure Debug(Message: String);
 begin
   if DebugMode then Writeln(Message);
+end;
+
+procedure Mose(X, Y, Xr, Yr: Integer; Button: Variant); overload;
+begin
+  Mose(X, Y, Xr, Yr, MouseWait, Multi, Button);
 end;
 
 function StoreScreen: Boolean;
